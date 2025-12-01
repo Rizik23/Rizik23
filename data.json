@@ -1,5 +1,8 @@
-{
-  "username": "admin",
-  "password": "12345",
-  "title": "Dragon Login Panel"
-}
+[
+  {
+    "username": "admin",
+    "password": "123",
+    "role": "owner",
+    "expiresAt": null
+  }
+]
