@@ -1757,26 +1757,31 @@ bot.action("cancel_order", async (ctx) => {
 });
 
 bot.action("back_to_main_menu", async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
+  await ctx.answerCbQuery().catch(() => {});
 
-    await ctx.editMessageCaption(menuTextBot(ctx), {
-        parse_mode: "HTML",
-        reply_markup: {
-            inline_keyboard: [
-                [
-                    { text: "🛍️ Katalog Produk", callback_data: "katalog" }
-                ],
-                [
-                    { text: "👤 Cek Profil", callback_data: "profile" },
-                    { text: "📮 Cek History", callback_data: "history" }
-                ],
-                [
-                    { text: "📢 Testimoni", url: config.channelLink },
-                    { text: "📞 Developer", url: "https://t.me/" + config.ownerUsername }
-                ]
-            ]
-        }
-    }).catch(() => {});
+  await ctx.editMessageMedia(
+    {
+      type: "photo",
+      media: config.menuImage,
+      caption: menuTextBot(ctx),
+      parse_mode: "HTML"
+    },
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🛍️ Katalog Produk", callback_data: "katalog" }],
+          [
+            { text: "👤 Cek Profil", callback_data: "profile" },
+            { text: "📮 Cek History", callback_data: "history" }
+          ],
+          [
+            { text: "📢 Testimoni", url: config.channelLink },
+            { text: "📞 Developer", url: "https://t.me/" + config.ownerUsername }
+          ]
+        ]
+      }
+    }
+  ).catch(() => {});
 });
     
 bot.action("katalog", async (ctx) => {
