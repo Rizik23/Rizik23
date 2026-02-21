@@ -34,6 +34,8 @@ const saveDO = (d) => fs.writeFileSync(doDB, JSON.stringify(d, null, 2));
 
 // ===================== FUNGSI UTILITAS =====================
 
+const USERS_PER_PAGE = 10;
+
 // Fungsi untuk escape karakter html khusus
 function escapeMarkdown(text) {
     if (!text) return '';
@@ -202,16 +204,30 @@ const menuTextBot = (ctx) => {
   const { totalUser, totalTransaksi, totalPemasukan } = getBotStats(db);
 
   return `
-<blockquote><b>🤖 Informasi Profile Bot</b></blockquote>
-ᯤ Runtime: ${runtime(process.uptime())}
-ᯤ Total User: ${totalUser}
-ᯤ Total Pemasukan: Rp${escapeHTML(totalPemasukan.toLocaleString("id-ID"))}
-ᯤ Total Transaksi: ${totalTransaksi}
+🚀 𝐀𝐔𝐓𝐎 𝐎𝐑𝐃𝐄𝐑
+ʙᴏᴛ ʟᴀʏᴀɴᴀɴ ᴏᴛᴏᴍᴀᴛɪꜱ ʏᴀɴɢ ʙᴇʀᴛᴜɢᴀꜱ
+ᴍᴇᴍᴘᴇʀᴄᴇᴘᴀᴛ ᴛʀᴀɴꜱᴀᴋꜱɪ ᴅᴇɴɢᴀɴ layanan
+⚙️SISTEM FULL OTOMATIS
+➥Auto create panel
+➥Auto proses pembayaran
+➥Auto kirim data akun
+➥Online 24/7 nonstop
+📊 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐊
+🪧 𝙧𝙪𝙣𝙩𝙞𝙢𝙚 𝙗𝙤𝙩 : 0d 7h 35m
+👥 𝚝𝚘𝚝𝚊𝚕 𝚞𝚜𝚎𝚛𝚜 𝚋𝚘𝚝 : 2070
+💰 𝚝𝚘𝚝𝚊𝚕 𝚙𝚎𝚗𝚍𝚊𝚙𝚊𝚝𝚊𝚗 : Rp 24.980.800
+🛒 𝚝𝚘𝚝𝚊𝚕 𝚝𝚛𝚊𝚗𝚜𝚊𝚔𝚜𝚒 : 1071
+AUTO ORDER BY YOGZ
+
+
+<blockquote><b>📊 Informasi Profile Bot</b></blockquote>
+🪧 Runtime: ${runtime(process.uptime())}
+👥 Total User: ${totalUser}
+💰 Total Pemasukan: Rp${escapeHTML(totalPemasukan.toLocaleString("id-ID"))}
+🛒 Total Transaksi: ${totalTransaksi}
 
 <blockquote><b>🪪 Informasi Profil Anda</b></blockquote>
-ᯤ ID: ${userId}
-ᯤ Nama Depan: ${escapeHTML(firstName)}
-ᯤ Nama Belakang: ${escapeHTML(lastName)}
+
 `;
 };
 
@@ -271,6 +287,66 @@ ${detailText}
 
 ⚠️ Apakah Anda yakin ingin melanjutkan pembayaran?
 `;
+}
+
+async function sendUserPage(ctx, page = 0) {
+    const users = loadUsers();
+    if (!users || users.length === 0) {
+        return ctx.reply("📭 Belum ada user terdaftar.");
+    }
+
+    const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
+    const start = page * USERS_PER_PAGE;
+    const end = start + USERS_PER_PAGE;
+
+    let userText = `<b>📊 TOTAL USERS: ${users.length}</b>\n`;
+    userText += `<b>📄 PAGE ${page + 1} / ${totalPages}</b>\n\n`;
+
+    users.slice(start, end).forEach((u, i) => {
+        const fullName =
+            (u.first_name || "") +
+            (u.last_name ? " " + u.last_name : "");
+
+        const username = u.username ? "@" + u.username : "-";
+
+        userText += `<b>${start + i + 1}. ${escapeHTML(fullName || "No Name")}</b>\n`;
+        userText += `🆔 <code>${u.id}</code>\n`;
+        userText += `👤 ${escapeHTML(username)}\n`;
+        userText += `💰 Rp${toRupiah(u.total_spent || 0)}\n`;
+        userText += `📅 ${u.join_date ? new Date(u.join_date).toLocaleDateString("id-ID") : "-"}\n\n`;
+    });
+
+    const buttons = [];
+
+    if (page > 0) {
+        buttons.push({
+            text: "⬅️ Prev",
+            callback_data: `userpage_${page - 1}`
+        });
+    }
+
+    if (page < totalPages - 1) {
+        buttons.push({
+            text: "➡️ Next",
+            callback_data: `userpage_${page + 1}`
+        });
+    }
+
+    const keyboard = {
+        inline_keyboard: buttons.length > 0 ? [buttons] : []
+    };
+
+    if (ctx.callbackQuery) {
+        await ctx.editMessageText(userText, {
+            parse_mode: "HTML",
+            reply_markup: keyboard
+        });
+    } else {
+        await ctx.reply(userText, {
+            parse_mode: "HTML",
+            reply_markup: keyboard
+        });
+    }
 }
 
 const isOwner = (ctx) => {
@@ -895,7 +971,7 @@ bot.action("deladmin-back", async (ctx) => {
                                 { text: "📮 Cek History", callback_data: "history" }
                             ], 
                             [
-                                { text: "📢 Testimoni", url: config.channelLink  }, 
+                                { text: "📢 Channel", url: config.channelLink  }, 
                                 { text: "📞 Developer", url: "https://t.me/"+config.ownerUsername  }
                             ]
                         ]
@@ -911,7 +987,7 @@ bot.action("deladmin-back", async (ctx) => {
                     reply_markup: {
                         inline_keyboard: [
                             [
-                                { text: "📢 Channel Testimoni", url: config.channelLink }
+                                { text: "📢 Channel", url: config.channelLink }
                             ]
                         ]
                     }
@@ -940,17 +1016,19 @@ case "profile": {
     }
 
     const profileText = `
-<b>👤 Profile User</b>
-
-<b>📛 Nama:</b> ${escapeHTML(fullName)}
+<blockquote><b>🪪 Profile Kamu</b>
+━━━━━━━━━━━━━━━━━━━━━━
+<b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>
+<b>👤 Nama Depan:</b> <code>${escapeHTML(firstName)}</code>
+<b>👥 Nama Belakang:</b> ${escapeHTML(lastName)}</code>
 <b>🆔 User ID:</b> <code>${user.id}</code>
 <b>📧 Username:</b> ${escapeHTML(userUsername)}
 <b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}
 <b>💰 Total Spent:</b> Rp${toRupiah(user.total_spent || 0)}
 <b>📊 Total Transaksi:</b> ${user.history ? user.history.length : 0}
-
+━━━━━━━━━━━━━━━━━━━━━━
 <b>📋 Last 3 Transactions:</b>\n
-${lastTransactions}
+${lastTransactions}</blockquote>
     `.trim();
 
     return ctx.reply(profileText, { parse_mode: "HTML", disable_web_page_preview: true });
@@ -980,6 +1058,11 @@ case "history": {
 // ===== USERLIST (OWNER ONLY) =====
 case "userlist": {
     if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    return sendUserPage(ctx, 0);
+}
+/*
+case "userlist": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
     const users = loadUsers();
     if (users.length === 0) return ctx.reply("📭 Belum ada user terdaftar.");
 
@@ -1001,7 +1084,7 @@ case "userlist": {
     }
 
     return ctx.reply(userText, { parse_mode: "HTML" });
-}
+}*/
 
 // ===== ADD SCRIPT =====
 case "addscript": {
@@ -1488,11 +1571,11 @@ bot.action("buyapp", async (ctx) => {
     ]);
 
     categoryButtons.push([
-        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }
+        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }
     ]);
 
     ctx.reply(
-        "<b>Pilih Kategori Apps Premium:</b>",
+        "<b>Pilih Kategori Apps Premium:<b>",
         {
             parse_mode: "html",
             reply_markup: { inline_keyboard: categoryButtons }
@@ -1618,7 +1701,7 @@ bot.action("buydo", async (ctx) => {
   ]);
 
   categoryButtons.push([
-    { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }
+    { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }
   ]);
 
   ctx.reply(
@@ -1646,7 +1729,7 @@ bot.action("buyvps", async (ctx) => {
   ]);
 
   packageButtons.push([
-    { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }
+    { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }
   ]);
 
   ctx.reply(
@@ -1775,7 +1858,7 @@ bot.action("back_to_main_menu", async (ctx) => {
             { text: "📮 Cek History", callback_data: "history" }
           ],
           [
-            { text: "📢 Testimoni", url: config.channelLink },
+            { text: "📢 Channel", url: config.channelLink },
             { text: "📞 Developer", url: "https://t.me/" + config.ownerUsername }
           ]
         ]
@@ -1830,6 +1913,16 @@ Pilih kategori produk yang ingin dibeli:</blockquote>
       console.error(err);
     }
   }
+});
+
+bot.action(/userpage_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1]);
+
+    if (!isOwner(ctx)) {
+        return ctx.answerCbQuery("❌ Owner Only!", { show_alert: true });
+    }
+
+    await sendUserPage(ctx, page);
 });
 
 // ===== STOCK CATEGORY VIEW =====
@@ -2713,8 +2806,12 @@ bot.action("back_to_do_categories", async (ctx) => {
         const categoryButtons = categories.map(cat => [
             { text: `📱 ${cat.charAt(0).toUpperCase() + cat.slice(1)}`, callback_data: `app_category|${cat}` }
         ]);
+        
+        categoryButtons.push([
+            { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }
+        ]);
 
-        return ctx.editMessageText("*Pilih Kategori Apps Premium:*", {
+        return ctx.editMessageText("<b>Pilih Kategori Apps Premium:</b>", {
             parse_mode: "html",
             reply_markup: { inline_keyboard: categoryButtons }
         });
