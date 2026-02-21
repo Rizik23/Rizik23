@@ -204,30 +204,21 @@ const menuTextBot = (ctx) => {
   const { totalUser, totalTransaksi, totalPemasukan } = getBotStats(db);
 
   return `
-🚀 𝐀𝐔𝐓𝐎 𝐎𝐑𝐃𝐄𝐑
+<blockquote><b>🚀 AUTO ORDER</b></blockquote>
 ʙᴏᴛ ʟᴀʏᴀɴᴀɴ ᴏᴛᴏᴍᴀᴛɪꜱ ʏᴀɴɢ ʙᴇʀᴛᴜɢᴀꜱ
 ᴍᴇᴍᴘᴇʀᴄᴇᴘᴀᴛ ᴛʀᴀɴꜱᴀᴋꜱɪ ᴅᴇɴɢᴀɴ layanan
-⚙️SISTEM FULL OTOMATIS
-➥Auto create panel
-➥Auto proses pembayaran
-➥Auto kirim data akun
-➥Online 24/7 nonstop
-📊 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐊
-🪧 𝙧𝙪𝙣𝙩𝙞𝙢𝙚 𝙗𝙤𝙩 : 0d 7h 35m
-👥 𝚝𝚘𝚝𝚊𝚕 𝚞𝚜𝚎𝚛𝚜 𝚋𝚘𝚝 : 2070
-💰 𝚝𝚘𝚝𝚊𝚕 𝚙𝚎𝚗𝚍𝚊𝚙𝚊𝚝𝚊𝚗 : Rp 24.980.800
-🛒 𝚝𝚘𝚝𝚊𝚕 𝚝𝚛𝚊𝚗𝚜𝚊𝚔𝚜𝚒 : 1071
-AUTO ORDER BY YOGZ
 
+<blockquote><b>⚙️SISTEM FULL OTOMATIS</b></blockquote>
+⌥ Auto create panel
+⌥ Auto proses pembayaran
+⌥ Auto kirim data akun
+⌥ Online 24/7 nonstop
 
-<blockquote><b>📊 Informasi Profile Bot</b></blockquote>
+<blockquote><b>📊 STATISTIK</b></blockquote>
 🪧 Runtime: ${runtime(process.uptime())}
 👥 Total User: ${totalUser}
 💰 Total Pemasukan: Rp${escapeHTML(totalPemasukan.toLocaleString("id-ID"))}
 🛒 Total Transaksi: ${totalTransaksi}
-
-<blockquote><b>🪪 Informasi Profil Anda</b></blockquote>
-
 `;
 };
 
@@ -1020,7 +1011,7 @@ case "profile": {
 ━━━━━━━━━━━━━━━━━━━━━━
 <b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>
 <b>👤 Nama Depan:</b> <code>${escapeHTML(firstName)}</code>
-<b>👥 Nama Belakang:</b> ${escapeHTML(lastName)}</code>
+<b>👥 Nama Belakang:</b> <code>${escapeHTML(lastName)}</code>
 <b>🆔 User ID:</b> <code>${user.id}</code>
 <b>📧 Username:</b> ${escapeHTML(userUsername)}
 <b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}
@@ -1471,7 +1462,8 @@ case "delstockdo": {
 }
 
             // ===== BUY ADMIN =====
-           case "buyadp":  case "buyadmin": {
+           case "buyadp":  
+           case "buyadmin": {
                 if (!text)
                     return ctx.reply(`Ketik ${config.prefix}buyadmin username untuk membeli admin panel.`);
                 if (text.includes(" "))
@@ -1598,7 +1590,7 @@ bot.action("profile", async (ctx) => {
 ━━━━━━━━━━━━━━━━━━━━━━
 <b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>
 <b>👤 Nama Depan:</b> <code>${escapeHTML(firstName)}</code>
-<b>👥 Nama Belakang:</b> ${escapeHTML(lastName)}</code>
+<b>👥 Nama Belakang:</b> <code>${escapeHTML(lastName)}</code>
 <b>🆔 User ID:</b> <code>${user.id}</code>
 <b>📧 Username:</b> ${escapeHTML(userUsername)}
 <b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}
@@ -3704,7 +3696,7 @@ bot.action("back_to_script", async (ctx) => {
 
             await ctx.telegram.sendMessage(
                 o.chatId,
-                `✅ Pembayaran Berhasil!
+                `<blockquote><b>✅ Pembayaran Berhasil!</b></blockquote>
 
 📦 Produk: ${escapeHTML(o.name)}
 💰 Harga: Rp${toRupiah(o.amount)} (Fee Rp${o.fee})
@@ -3762,16 +3754,16 @@ Terimakasih sudah membeli produk ♥️`,
 
                 res = res.data;
 
-                const teksPanel = `✅ Panel Pterodactyl Berhasil Dibuat!
+                const teksPanel = `<blockquote><b>✅ Panel Pterodactyl Berhasil Dibuat!</b></blockquote>
 
-👤 Username: ${escapeHTML(res.username)}
-🔑 Password: ${escapeHTML(res.password)}
+👤 Username: <code>${escapeHTML(res.username)}</code>
+🔑 Password: <code>${escapeHTML(res.password)}</code>
 💾 RAM: ${ram}
 🆔 Server ID: ${res.serverId}
 📛 Server Name: ${escapeHTML(res.serverName)}
 ⏳ Expired: 1 Bulan
 
-📌 Cara Login:
+<blockquote><b>📌 Cara Login:</b></blockquote>
 1. Klik tombol Login Panel di bawah
 2. Masukkan username & password
 3. Server siap dipakai!`;
@@ -3818,14 +3810,14 @@ Terimakasih sudah membeli produk ♥️`,
                     });
                 }
 
-                const teksAdmin = `✅ Admin Panel Berhasil Dibuat!
+                const teksAdmin = `<blockquote><b>✅ Admin Panel Berhasil Dibuat!</b></blockquote>
 
 🆔 User ID: ${res.id}
-👤 Username: ${escapeHTML(res.username)}
-🔑 Password: ${escapeHTML(res.password)}
+👤 Username: <code>${escapeHTML(res.username)}</code>
+🔑 Password: <code>${escapeHTML(res.password)}</code>
 ⏳ Expired: 1 Bulan
 
-📌 Cara Login:
+<blockquote></b>📌 Cara Login:</b></blockquote>
 1. Klik tombol Login Panel di bawah
 2. Masukkan username & password
 3. Admin panel siap digunakan!`;
@@ -3888,7 +3880,7 @@ Terimakasih sudah membeli produk ♥️`,
 
                     fs.writeFileSync(tempFilePath, fileContent);
 
-                    const appText = `✅ Apps Premium Berhasil Dibeli!
+                    const appText = `<blockquote><b>✅ Apps Premium Berhasil Dibeli!</b></blockquote>
 
 📱 Produk: ${escapeHTML(o.name)}
 💰 Harga: Rp${toRupiah(o.amount)}
@@ -3896,7 +3888,7 @@ Terimakasih sudah membeli produk ♥️`,
 📁 Data akun telah dikirim dalam file .txt
 📝 Silakan download file untuk melihat detail akun
 
-📌 Cara Pakai:
+<blockquote><b>📌 Cara Pakai:</b></blockquote>
 1. Login dengan akun yang tersedia
 2. Nikmati fitur premium
 3. Jangan bagikan akun ke orang lain
@@ -3924,15 +3916,15 @@ Terimakasih sudah membeli produk ♥️`,
 
                     } catch (error) {
                         console.error("Error sending file:", error);
-                        const fallbackText = `✅ Apps Premium Berhasil Dibeli!
+                        const fallbackText = `<b>✅ Apps Premium Berhasil Dibeli!</b>
 
 📱 Produk: ${escapeHTML(o.name)}
 💰 Harga: Rp${toRupiah(o.amount)}
 
-🔑 Data Akun: 
-\`${escapeHTML(sentAccount)}\`
+<blockquote><b>🔑 Data Akun: </b></blockquote>
+<code>${escapeHTML(sentAccount)}</code>
 
-📌 Cara Pakai:
+<blockquote><b>📌 Cara Pakai:</b></blockquote>
 1. Login dengan akun di atas
 2. Nikmati fitur premium
 3. Jangan bagikan akun ke orang lain
@@ -3989,7 +3981,7 @@ Terimakasih sudah membeli produk ♥️`,
 
                     fs.writeFileSync(tempFilePath, fileContent);
 
-                    const doText = `✅ Akun Digital Ocean Berhasil Dibeli!
+                    const doText = `<blockquote><b>✅ Akun Digital Ocean Berhasil Dibeli!</b></blockquote>
 
 🌊 Produk: ${escapeHTML(o.name)}
 💰 Harga: Rp${toRupiah(o.amount)}
@@ -3997,7 +3989,7 @@ Terimakasih sudah membeli produk ♥️`,
 📁 Data akun telah dikirim dalam file .txt
 📝 Silakan download file untuk melihat detail akun
 
-📌 Cara Pakai:
+<blockquote><b>📌 Cara Pakai:</b></blockquote>
 1. Login ke https://cloud.digitalocean.com
 2. Gunakan akun yang tersedia
 3. Credit siap digunakan untuk membuat VPS/droplet
@@ -4025,15 +4017,15 @@ Terimakasih sudah membeli produk ♥️`,
 
                     } catch (error) {
                         console.error("Error sending file:", error);
-                        const fallbackText = `✅ Akun Digital Ocean Berhasil Dibeli!
+                        const fallbackText = `</blockquote><b>✅ Akun Digital Ocean Berhasil Dibeli!</b><blockquote>
 
 🌊 Produk: ${escapeHTML(o.name)}
 💰 Harga: Rp${toRupiah(o.amount)}
 
-🔑 Data Akun: 
-\`${escapeHTML(sentAccount)}\`
+<blockquote><b>🔑 Data Akun:</b> </blockquote>
+<code>${escapeHTML(sentAccount)}</code>
 
-📌 Cara Pakai:
+<blockquote><b>📌 Cara Pakai:</b></blockquote>
 1. Login ke https://cloud.digitalocean.com
 2. Gunakan akun di atas
 3. Credit siap digunakan untuk membuat VPS/droplet
@@ -4113,31 +4105,31 @@ Terimakasih sudah membeli produk ♥️`,
                         await ctx.telegram.deleteMessage(o.chatId, processingMsg.message_id);
                     } catch (e) { }
 
-                    const vpsText = `✅ *VPS Digital Ocean Berhasil Dibuat!*
+                    const vpsText = `
+<blockquote>✅ <b>VPS Digital Ocean Berhasil Dibuat!</b></blockquote>
 
-🎯 *Detail Order:*
+<blockquote>🎯 <b>Detail Order:</b></blockquote>
 ├ Produk: ${escapeHTML(o.name)}
 ├ Harga: Rp${toRupiah(o.amount)}
 └ Status: ${status === 'active' ? '✅ Active' : '🔄 Creating'}
 
-📊 *Spesifikasi:*
+<blockquote>📊 <b>Spesifikasi:</b></blockquote>
 ├ ${escapeHTML(o.spec.ramCpu.name)}
 ├ ${escapeHTML(o.spec.os.name)}
 ├ ${o.spec.region.flag} ${escapeHTML(o.spec.region.name)}
 └ ${o.spec.region.latency}
 
-🔧 *Informasi Server:*
-├ Server ID: \`${dropletId}\`
-├ Hostname: \`${hostname}\`
-├ IP Address: \`${ipAddress}\`
-├ Username: \`root\`
-└ Password: \`${password}\`
+<blockquote>🔧 <b>Informasi Server:</b></blockquote>
+├ Server ID: <code>${dropletId}</code>
+├ Hostname: <code>${hostname}</code>
+├ IP Address: <code>${ipAddress}</code>
+├ Username: <code>root</code>
+└ Password: <code>${password}</code>
 
-📌 *Cara Akses SSH:*
-\`\`\`
-ssh root@${ipAddress}
-\`\`\`
-Password: \`${password}\`
+📌 <b>Cara Akses SSH:</b>
+<code>ssh root@${ipAddress}</code>
+
+Password: <code>${password}</code>
 `;
 
                     await ctx.telegram.sendMessage(o.chatId, vpsText, {
@@ -4226,7 +4218,7 @@ Password: \`${password}\`
 
         const duration = Math.floor((Date.now() - startTime) / 1000);
 
-        const finalText = `✅ *BROADCAST SELESAI*\n\n` +
+        const finalText = `✅ <b>BROADCAST SELESAI</b>\n\n` +
             `📊 Total User: ${totalUsers}\n` +
             `✅ Berhasil dikirim: ${successCount}\n` +
             `❌ Gagal dikirim: ${failedCount}\n` +
