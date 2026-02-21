@@ -1785,37 +1785,51 @@ bot.action("back_to_main_menu", async (ctx) => {
 });
     
 bot.action("katalog", async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
+  await ctx.answerCbQuery().catch(() => {});
 
-    const storeMenuKeyboard = {
-        inline_keyboard: [
-            [
-                { text: "📡 ☇ 𝐏𝐀𝐍𝐄𝐋", callback_data: "buypanel" },
-                { text: "👑 ☇ 𝐀𝐃𝐏", callback_data: "buyadmin" },
-            ],
-            [
-                { text: "🖥 ☇ 𝐕𝐏𝐒", callback_data: "buyvps" },
-                { text: "🌐 ☇ 𝐀𝐊𝐔𝐍 𝐃𝐎", callback_data: "buydo" },
-            ],
-            [
-                { text: "📱 ☇ 𝐀𝐏𝐏𝐒", callback_data: "buyapp" },
-                { text: "🗂 ☇ 𝐒𝐂𝐑𝐈𝐏𝐓", callback_data: "buyscript" }
-            ],
-            [
-                { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
-            ]
-        ]
-    };
+  const storeMenuKeyboard = {
+    inline_keyboard: [
+      [
+        { text: "📡 ☇ 𝐏𝐀𝐍𝐄𝐋", callback_data: "buypanel" },
+        { text: "👑 ☇ 𝐀𝐃𝐏", callback_data: "buyadmin" }
+      ],
+      [
+        { text: "🖥 ☇ 𝐕𝐏𝐒", callback_data: "buyvps" },
+        { text: "🌐 ☇ 𝐀𝐊𝐔𝐍 𝐃𝐎", callback_data: "buydo" }
+      ],
+      [
+        { text: "📱 ☇ 𝐀𝐏𝐏𝐒", callback_data: "buyapp" },
+        { text: "🗂 ☇ 𝐒𝐂𝐑𝐈𝐏𝐓", callback_data: "buyscript" }
+      ],
+      [
+        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
+      ]
+    ]
+  };
 
-    await ctx.editMessageCaption(
-`<blockquote>🛍️ 𝗗𝗔𝗙𝗧𝗔𝗥 𝗠𝗘𝗡𝗨 𝗟𝗔𝗬𝗔𝗡𝗔𝗡 𝗕𝗢𝗧
+  const captionText = `
+<blockquote>🛍️ 𝗗𝗔𝗙𝗧𝗔𝗥 𝗠𝗘𝗡𝗨 𝗟𝗔𝗬𝗔𝗡𝗔𝗡 𝗕𝗢𝗧
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-Pilih kategori produk yang ingin dibeli:</blockquote>`,
-        {
-            parse_mode: "HTML",
-            reply_markup: storeMenuKeyboard
-        }
-    ).catch(() => {});
+Pilih kategori produk yang ingin dibeli:</blockquote>
+`;
+
+  try {
+    await ctx.editMessageMedia(
+      {
+        type: "photo",
+        media: config.katalogImage, // bisa beda foto
+        caption: captionText,
+        parse_mode: "HTML"
+      },
+      {
+        reply_markup: storeMenuKeyboard
+      }
+    );
+  } catch (err) {
+    if (!err.description?.includes("message is not modified")) {
+      console.error(err);
+    }
+  }
 });
 
 // ===== STOCK CATEGORY VIEW =====
