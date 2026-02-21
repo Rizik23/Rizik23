@@ -1060,31 +1060,6 @@ case "userlist": {
     if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
     return sendUserPage(ctx, 0);
 }
-/*
-case "userlist": {
-    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
-    const users = loadUsers();
-    if (users.length === 0) return ctx.reply("📭 Belum ada user terdaftar.");
-
-    let userText = `<b>📊 Total Users: ${users.length}</b>\n\n`;
-
-    users.slice(0, 20).forEach((u, i) => {
-        const fullName = u.first_name + (u.last_name ? ' ' + u.last_name : '');
-        const username = u.username ? '@' + u.username : '-';
-
-        userText += `<b>${i + 1}. ${escapeHTML(fullName)}</b>\n`;
-        userText += `<code>ID: ${u.id}</code>\n`;
-        userText += `📧 ${escapeHTML(username)}\n`;
-        userText += `💰 Spent: Rp${toRupiah(u.total_spent || 0)}\n`;
-        userText += `📅 Join: ${new Date(u.join_date).toLocaleDateString('id-ID')}\n\n`;
-    });
-
-    if (users.length > 20) {
-        userText += `<i>...dan ${users.length - 20} user lainnya</i>`;
-    }
-
-    return ctx.reply(userText, { parse_mode: "HTML" });
-}*/
 
 // ===== ADD SCRIPT =====
 case "addscript": {
@@ -1575,7 +1550,7 @@ bot.action("buyapp", async (ctx) => {
     ]);
 
     ctx.reply(
-        "<b>Pilih Kategori Apps Premium:<b>",
+        "<b>Pilih Kategori Apps Premium:</b>",
         {
             parse_mode: "html",
             reply_markup: { inline_keyboard: categoryButtons }
@@ -1619,17 +1594,19 @@ bot.action("profile", async (ctx) => {
     }
 
     const profileText = `
-<b>👤 Profile User</b>
-
-<b>📛 Nama:</b> ${escapeHTML(fullName)}
+<blockquote><b>🪪 Profile Kamu</b>
+━━━━━━━━━━━━━━━━━━━━━━
+<b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>
+<b>👤 Nama Depan:</b> <code>${escapeHTML(firstName)}</code>
+<b>👥 Nama Belakang:</b> ${escapeHTML(lastName)}</code>
 <b>🆔 User ID:</b> <code>${user.id}</code>
 <b>📧 Username:</b> ${escapeHTML(userUsername)}
 <b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}
 <b>💰 Total Spent:</b> Rp${toRupiah(user.total_spent || 0)}
 <b>📊 Total Transaksi:</b> ${user.history ? user.history.length : 0}
-
-<b>📋 Last 3 Transactions:</b>
-${lastTransactions}
+━━━━━━━━━━━━━━━━━━━━━━
+<b>📋 Last 3 Transactions:</b>\n
+${lastTransactions}</blockquote>
     `.trim();
 
     ctx.reply(profileText, {
