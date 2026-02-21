@@ -1492,7 +1492,7 @@ bot.action("buyapp", async (ctx) => {
     ]);
 
     ctx.reply(
-        "<b>Pilih Kategori Apps Premium:<b>",
+        "<b>Pilih Kategori Apps Premium:</b>",
         {
             parse_mode: "html",
             reply_markup: { inline_keyboard: categoryButtons }
