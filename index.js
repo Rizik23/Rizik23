@@ -87,17 +87,7 @@ await client.start({
     bot.launch();
 
     const userCommands = [
-      { command: "menu", description: "Tampilkan Menu Utama" },
-      { command: "start", description: "Mulai bot" },
-      { command: "buypanel", description: "Beli Panel Pterodactyl" },
-      { command: "buyadmin", description: "Beli Admin Panel" },
-      { command: "buyscript", description: "Beli Script" },
-      { command: "buyapps", description: "Beli Apps Premium" },
-      { command: "buydo", description: "Beli Akun Digital Ocean" },
-      { command: "buyvps", description: "Beli VPS Digital Ocean" },
-      { command: "cekstok", description: "Cek Stok" },
-      { command: "profile", description: "Lihat Profile" },
-      { command: "history", description: "Riwayat Transaksi" }
+      { command: "start", description: "🐸 Tampilkan Menu Utama Kaell" }
     ];
 
     const ownerCommands = [
@@ -112,6 +102,8 @@ await client.start({
       { command: "addstockdo", description: "Tambah stock DO" },
       { command: "delstockdo", description: "Hapus stock DO" },
       { command: "getstockdo", description: "Lihat stock DO" },
+      { command: "addsaldo", description: "Tambah Saldo User" },
+      { command: "delsaldo", description: "Hapus Saldo Jumlah" },
       { command: "userlist", description: "Daftar user" }
     ];
 

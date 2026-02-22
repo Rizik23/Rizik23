@@ -988,14 +988,14 @@ bot.action("deladmin-back", async (ctx) => {
         
         const depositButtons = [
             [
-                { text: "Rp 1.000", callback_data: "deposit_pay|1000" },
-                { text: "Rp 2.000", callback_data: "deposit_pay|2000" },
-                { text: "Rp 5.000", callback_data: "deposit_pay|5000" }
+                { text: "Rp 5.000", callback_data: "deposit_pay|5000" },
+                { text: "Rp 10.000", callback_data: "deposit_pay|1000" },
+                { text: "Rp 15.000", callback_data: "deposit_pay|15000" }
             ],
             [
-                { text: "Rp 10.000", callback_data: "deposit_pay|10000" },
                 { text: "Rp 20.000", callback_data: "deposit_pay|20000" },
-                { text: "Rp 50.000", callback_data: "deposit_pay|50000" }
+                { text: "Rp 25.000", callback_data: "deposit_pay|25000" },
+                { text: "Rp 30.000", callback_data: "deposit_pay|30000" }
             ],
             [
                 { text: "✏️ Custom Deposit", callback_data: "deposit_custom" }
@@ -1006,7 +1006,7 @@ bot.action("deladmin-back", async (ctx) => {
         ];
 
         return ctx.editMessageCaption(
-            `💰 <b>Pilih Nominal Deposit</b>\n\nSilakan pilih nominal deposit yang ingin ditambahkan ke saldo Anda, atau klik <b>Custom Deposit</b> untuk memasukkan angka sendiri.`,
+            `<blockquote>💰 <b>Pilih Nominal Deposit</b>\n\nSilakan pilih nominal deposit yang ingin ditambahkan ke saldo Anda, atau klik <b>Custom Deposit</b> untuk memasukkan angka sendiri</blockquote>`,
             {
                 parse_mode: "HTML",
                 reply_markup: { inline_keyboard: depositButtons }
@@ -1030,7 +1030,7 @@ bot.action("deladmin-back", async (ctx) => {
         pendingDeposit[userId] = true; // Tandai bahwa user ini sedang mau ngetik nominal
         
         return ctx.editMessageCaption(
-            `✏️ <b>Custom Deposit</b>\n\nSilakan balas pesan ini dengan mengetik <b>angka nominal</b> deposit yang Anda inginkan (contoh: <code>15000</code> atau <code>5.000</code>).\n\n<i>Minimal deposit Rp1.000</i>`,
+            `<blockquote>✏️ <b>Custom Deposit</b>\n\nSilakan balas pesan ini dengan mengetik <b>angka nominal</b> deposit yang Anda inginkan (contoh: <code>15000</code> atau <code>5.000</code>).\n\n<i>Minimal deposit Rp1.000</i></blockquote>`,
             { parse_mode: "HTML" }
         ).catch(() => {});
     });
@@ -1094,11 +1094,11 @@ bot.action("deladmin-back", async (ctx) => {
                                 { text: "📮 Cek History", callback_data: "history" }
                             ], 
                             [
-                                { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }
+                                { text: "💳 Deposit Saldo", callback_data: "deposit_menu" },
+                                { text: "🏆 Top Pengguna", callback_data: "top_users" }
                             ], 
                             [
-                                { text: "📢 Channel", url: config.channelLink  }, 
-                                { text: "📞 Developer", url: "https://t.me/"+config.ownerUsername  }
+                                { text: "📢 Channel", url: config.channelLink  }
                             ]
                         ]
                     }
@@ -2039,6 +2039,91 @@ bot.action("cancel_order", async (ctx) => {
     ctx.deleteMessage().catch(() => {});
 });
 
+// ===== TOP PENGGUNA (LEADERBOARD) =====
+bot.action("top_users", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+
+    // Tarik data user dan urutkan berdasarkan total belanja tertinggi
+    const users = loadUsers();
+    const sortedUsers = users
+        .filter(u => u.total_spent > 0) // Hanya tampilkan yang pernah belanja
+        .sort((a, b) => (b.total_spent || 0) - (a.total_spent || 0));
+
+    // Fungsi untuk narik semua data (Full Stack)
+    const getTopData = (index) => {
+        const user = sortedUsers[index];
+        if (!user) {
+            return { 
+                id: "-",
+                name: "Belum ada", 
+                saldo: 0,
+                trx: 0,
+                total: 0 
+            };
+        }
+        
+        // Prioritaskan username, kalau gaada pakai nama depan, kalau gaada juga pakai ID
+        let name = user.username ? `@${user.username}` : (user.first_name || `User${user.id}`);
+        return { 
+            id: user.id,
+            name: escapeHTML(name), 
+            saldo: user.balance || 0,
+            trx: user.history ? user.history.length : 0,
+            total: user.total_spent || 0 
+        };
+    };
+
+    const top1 = getTopData(0);
+    const top2 = getTopData(1);
+    const top3 = getTopData(2);
+
+    const textTop = `
+<blockquote><b>🏆 LEADERBOARD TOP PENGGUNA</b></blockquote>
+Tingkatkan terus transaksi Anda dan jadilah Top Pengguna di bot kami!
+
+🥇 <b>𝗧𝗢𝗣 𝟭 (𝗦𝘂𝗹𝘁𝗮𝗻)</b>
+└ 🆔 <b>𝗜𝗗:</b> <code>${top1.id}</code>
+└ 📋 <b>𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲:</b> ${top1.name}
+└ 💳 <b>𝗦𝗮𝗹𝗱𝗼:</b> Rp ${top1.saldo.toLocaleString('id-ID')}
+└ 🛒 <b>𝗧𝗿𝗮𝗻𝘀𝗮𝗸𝘀𝗶:</b> ${top1.trx}x Pembelian
+└ 💵 <b>𝗧𝗼𝘁𝗮𝗹 𝗕𝗲𝗹𝗮𝗻𝗷𝗮:</b> Rp ${top1.total.toLocaleString('id-ID')}
+
+🥈 <b>𝗧𝗢𝗣 𝟮 (𝗝𝘂𝗿𝗮𝗴𝗮𝗻)</b>
+└ 🆔 <b>𝗜𝗗:</b> <code>${top2.id}</code>
+└ 📋 <b>𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲:</b> ${top2.name}
+└ 💳 <b>𝗦𝗮𝗹𝗱𝗼:</b> Rp ${top2.saldo.toLocaleString('id-ID')}
+└ 🛒 <b>𝗧𝗿𝗮𝗻𝘀𝗮𝗸𝘀𝗶:</b> ${top2.trx}x Pembelian
+└ 💵 <b>𝗧𝗼𝘁𝗮𝗹 𝗕𝗲𝗹𝗮𝗻𝗷𝗮:</b> Rp ${top2.total.toLocaleString('id-ID')}
+
+🥉 <b>𝗧𝗢𝗣 𝟯 (𝗝𝗮𝘄𝗮𝗿𝗮)</b>
+└ 🆔 <b>𝗜𝗗:</b> <code>${top3.id}</code>
+└ 📋 <b>𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲:</b> ${top3.name}
+└ 💳 <b>𝗦𝗮𝗹𝗱𝗼:</b> Rp ${top3.saldo.toLocaleString('id-ID')}
+└ 🛒 <b>𝗧𝗿𝗮𝗻𝘀𝗮𝗸𝘀𝗶:</b> ${top3.trx}x Pembelian
+└ 💵 <b>𝗧𝗼𝘁𝗮𝗹 𝗕𝗲𝗹𝗮𝗻𝗷𝗮:</b> Rp ${top3.total.toLocaleString('id-ID')}
+`.trim();
+
+    return ctx.editMessageCaption(textTop, {
+        parse_mode: "HTML",
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: "↩️ 𝗕𝗔𝗖𝗞", callback_data: "back_to_main_menu" }]
+            ]
+        }
+    }).catch(err => {
+        // Fallback kalau seandainya pesan aslinya ga ada fotonya
+        return ctx.editMessageText(textTop, {
+            parse_mode: "HTML",
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "↩️ 𝗕𝗔𝗖𝗞", callback_data: "back_to_main_menu" }]
+                ]
+            }
+        }).catch(()=> {});
+    });
+});
+
+
 bot.action("back_to_main_menu", async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
 
@@ -2058,11 +2143,11 @@ bot.action("back_to_main_menu", async (ctx) => {
             { text: "📮 Cek History", callback_data: "history" }
           ],
           [
-            { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }
+            { text: "💳 Deposit Saldo", callback_data: "deposit_menu" },
+            { text: "🏆 Top Pengguna", callback_data: "top_users" }
           ],
           [
-            { text: "📢 Channel", url: config.channelLink },
-            { text: "📞 Developer", url: "https://t.me/" + config.ownerUsername }
+            { text: "📢 Channel", url: config.channelLink }
           ]
         ]
       }
@@ -2076,16 +2161,16 @@ bot.action("katalog", async (ctx) => {
   const storeMenuKeyboard = {
     inline_keyboard: [
       [
-        { text: "📡 ☇ 𝐏𝐀𝐍𝐄𝐋", callback_data: "buypanel" },
-        { text: "👑 ☇ 𝐀𝐃𝐏", callback_data: "buyadmin" }
+        { text: "📡 ☇ Panel", callback_data: "buypanel" },
+        { text: "👑 ☇ Admin Panel", callback_data: "buyadmin" }
       ],
       [
-        { text: "🖥 ☇ 𝐕𝐏𝐒", callback_data: "buyvps" },
-        { text: "🌐 ☇ 𝐀𝐊𝐔𝐍 𝐃𝐎", callback_data: "buydo" }
+        { text: "🖥 ☇ Vps", callback_data: "buyvps" },
+        { text: "🌐 ☇ Akun Do", callback_data: "buydo" }
       ],
       [
-        { text: "📱 ☇ 𝐀𝐏𝐏𝐒", callback_data: "buyapp" },
-        { text: "🗂 ☇ 𝐒𝐂𝐑𝐈𝐏𝐓", callback_data: "buyscript" }
+        { text: "📱 ☇ Apk Prem", callback_data: "buyapp" },
+        { text: "🗂 ☇ Script", callback_data: "buyscript" }
       ],
       [
         { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
