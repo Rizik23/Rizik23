@@ -746,7 +746,7 @@ module.exports = (bot) => {
 
 // ####### HANDLE USERBOT MENU ##### //
 bot.action(/delpanel\|(.+)/, async (ctx) => {
-  await ctx.answerCbQuery();
+  await ctx.answerCbQuery().catch(() => {});
   if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
   const serverId = ctx.match[1];
 
@@ -805,7 +805,7 @@ bot.action(/delpanel\|(.+)/, async (ctx) => {
 });
 
 bot.action("delpanel-back", async (ctx) => {
-  await ctx.answerCbQuery();
+  await ctx.answerCbQuery().catch(() => {});
   if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
   const serverRes = await fetch(`${config.domain}/api/application/servers`, {
@@ -833,7 +833,7 @@ bot.action("delpanel-back", async (ctx) => {
 
 
 bot.action(/subdo\|(.+?)\|(.+?)\|(.+)/, async (ctx) => {
-  await ctx.answerCbQuery();
+  await ctx.answerCbQuery().catch(() => {});
   if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
   const [meki, domain, host, ip] = ctx.match[0].split("|");
@@ -884,7 +884,7 @@ bot.action(/subdo\|(.+?)\|(.+?)\|(.+)/, async (ctx) => {
 
 
 bot.action(/retry\|(.+?)\|(.+)/, async (ctx) => {
-  await ctx.answerCbQuery();
+  await ctx.answerCbQuery().catch(() => {});
   if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
   const [, host, ip] = ctx.match;
 
@@ -906,7 +906,7 @@ Pilih domain:`,
 
 
 bot.action(/deladmin\|(.+)/, async (ctx) => {
-  await ctx.answerCbQuery();
+  await ctx.answerCbQuery().catch(() => {});
   if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
   const userId = ctx.match[1];
 
@@ -949,7 +949,7 @@ bot.action(/deladmin\|(.+)/, async (ctx) => {
 
 
 bot.action("deladmin-back", async (ctx) => {
-  await ctx.answerCbQuery();
+  await ctx.answerCbQuery().catch(() => {});
   if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
   const res = await fetch(`${config.domain}/api/application/users`, {
@@ -1037,14 +1037,12 @@ bot.action("deladmin-back", async (ctx) => {
         ).catch(() => {});
     });
 
-    // Handle tombol nominal (1000, 5000, dll)
-    bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
-        await ctx.answerCbQuery().catch(() => {});
-        await ctx.deleteMessage().catch(() => {});
-        const amount = parseInt(ctx.match[1]);
-        const userId = ctx.from.id;
-        return processDeposit(ctx, amount, userId);
-    });
+bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    try { await ctx.deleteMessage(); } catch (e) { return; } // Anti Spam
+    const amount = parseInt(ctx.match[1]);
+    return processDeposit(ctx, amount, ctx.from.id);
+});
 
     // Handle tombol custom
     bot.action("deposit_custom", async (ctx) => {
@@ -1932,11 +1930,18 @@ case "delstockdo": {
         }
     });
 
-// ===== MENU BUY PROMPT =====
 bot.action("buyprompt", async (ctx) => {
     const promptsList = loadPrompts();
     if (!promptsList.length) return ctx.answerCbQuery("Stok prompt kosong", { show_alert: true });
+    
     await ctx.answerCbQuery().catch(() => {});
+
+    // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+    try {
+        await ctx.deleteMessage(); 
+    } catch (err) {
+        return; 
+    }
 
     const promptButtons = promptsList.map(s => [
         { text: `📄 ${escapeHTML(s.name)} - Rp${s.price}`, callback_data: `prompt|${s.name}` }
@@ -1944,11 +1949,11 @@ bot.action("buyprompt", async (ctx) => {
     promptButtons.push([{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }]);
 
     ctx.reply("<b>Pilih Nama Prompt:</b>", { parse_mode: "HTML", reply_markup: { inline_keyboard: promptButtons } }).catch(() => {});
-    ctx.deleteMessage().catch(() => {});
 });
 
+
 bot.action(/^prompt\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const name = ctx.match[1];
     const prompts = loadPrompts();
     const sc = prompts.find(s => s.name === name);
@@ -1968,7 +1973,7 @@ bot.action(/^prompt\|(.+)/, async (ctx) => {
 });
 
 bot.action("back_to_prompt", async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const promptsList = loadPrompts();
     if (!promptsList.length) return ctx.editMessageText("📭 Stok prompt sedang kosong.");
 
@@ -1979,7 +1984,7 @@ bot.action("back_to_prompt", async (ctx) => {
 });
 
 bot.action(/confirm_prompt\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const name = ctx.match[1];
     const userId = ctx.from.id;
     const prompts = loadPrompts();
@@ -1997,8 +2002,8 @@ bot.action(/confirm_prompt\|(.+)/, async (ctx) => {
 });
 
 bot.action(/pay_saldo_prompt\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
-    await ctx.deleteMessage();
+    await ctx.answerCbQuery().catch(() => {});
+    try { await ctx.deleteMessage(); } catch (e) { return; }
     const name = ctx.match[1];
     const userId = ctx.from.id;
     const prompts = loadPrompts();
@@ -2028,8 +2033,8 @@ bot.action(/pay_saldo_prompt\|(.+)/, async (ctx) => {
 });
 
 bot.action(/pay_qris_prompt\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
-    await ctx.deleteMessage();
+    await ctx.answerCbQuery().catch(() => {});
+    try { await ctx.deleteMessage(); } catch (e) { return; }
     const name = ctx.match[1];
     const userId = ctx.from.id;
     const prompts = loadPrompts();
@@ -2049,7 +2054,7 @@ bot.action(/pay_qris_prompt\|(.+)/, async (ctx) => {
 });
 
 bot.action(/getprompt_detail\|(\d+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
     const index = Number(ctx.match[1]);
     const prompts = loadPrompts();
@@ -2068,7 +2073,7 @@ bot.action(/getprompt_detail\|(\d+)/, async (ctx) => {
 });
 
 bot.action(/download_prompt\|(\d+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
     const prompts = loadPrompts();
     const s = prompts[Number(ctx.match[1])];
@@ -2077,7 +2082,7 @@ bot.action(/download_prompt\|(\d+)/, async (ctx) => {
 });
 
 bot.action("back_to_prompt_list", async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
     const allPrompts = loadPrompts();
     if (!allPrompts.length) return ctx.editMessageText("📭 Belum ada prompt.");
@@ -2086,7 +2091,7 @@ bot.action("back_to_prompt_list", async (ctx) => {
 });
 
 bot.action(/del_prompt\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
     const name = ctx.match[1];
     let prompts = loadPrompts();
@@ -2108,6 +2113,13 @@ bot.action("buyscript", async (ctx) => {
 
     await ctx.answerCbQuery().catch(() => {});
 
+    // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+    try {
+        await ctx.deleteMessage(); 
+    } catch (err) {
+        return; // Stop jika pesan sudah terhapus (mencegah spam)
+    }
+
     const scriptButtons = scriptsList.map(s => [
         {
             text: `🗂 ${escapeHTML(s.name)} - Rp${s.price}`,
@@ -2123,9 +2135,8 @@ bot.action("buyscript", async (ctx) => {
         parse_mode: "HTML",
         reply_markup: { inline_keyboard: scriptButtons }
     }).catch(() => {});
-
-    ctx.deleteMessage().catch(() => {});
 });
+
 
 
 bot.action("buyapp", async (ctx) => {
@@ -2136,6 +2147,13 @@ bot.action("buyapp", async (ctx) => {
         return ctx.answerCbQuery("Stok apps kosong", { show_alert: true });
 
     await ctx.answerCbQuery().catch(() => {});
+
+    // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+    try {
+        await ctx.deleteMessage(); 
+    } catch (err) {
+        return; 
+    }
 
     const categoryButtons = categories.map(cat => [
         {
@@ -2155,22 +2173,20 @@ bot.action("buyapp", async (ctx) => {
             reply_markup: { inline_keyboard: categoryButtons }
         }
     ).catch(() => {});
-
-    ctx.deleteMessage().catch(() => {});
 });
 
-// ===== PROFILE USER (ACTION) =====
-bot.action("profile", async (ctx) => {
-    const fromId = ctx.from.id;
 
+bot.action("profile", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    
+    // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+    try { await ctx.deleteMessage(); } catch (err) { return; }
+
+    const fromId = ctx.from.id;
     const users = loadUsers();
     const user = users.find(u => u.id === fromId);
 
-    if (!user) {
-        return ctx.answerCbQuery("❌ User tidak ditemukan", { show_alert: true });
-    }
-
-    await ctx.answerCbQuery().catch(() => {});
+    if (!user) return ctx.reply("❌ User tidak ditemukan");
 
     const firstName = user.first_name || '';
     const lastName = user.last_name || '';
@@ -2178,61 +2194,37 @@ bot.action("profile", async (ctx) => {
     const userUsername = user.username ? '@' + user.username : 'Tidak ada';
 
     let lastTransactions = '<i>Belum ada transaksi</i>';
-
     if (user.history && user.history.length > 0) {
-        lastTransactions = user.history
-            .slice(-3)
-            .reverse()
-            .map((t, i) => {
-                const product = escapeHTML(t.product);
-                const amount = toRupiah(t.amount);
-                const date = new Date(t.timestamp).toLocaleDateString('id-ID');
-                return `${i + 1}. ${product} - Rp${amount} (${date})`;
-            })
-            .join('\n');
+        lastTransactions = user.history.slice(-3).reverse().map((t, i) => {
+            return `${i + 1}. ${escapeHTML(t.product)} - Rp${toRupiah(t.amount)} (${new Date(t.timestamp).toLocaleDateString('id-ID')})`;
+        }).join('\n');
     }
 
-    const profileText = `
-<blockquote><b>🪪 Profile Kamu</b>
-━━━━━━━━━━━━━━━━━━━━━━
-<b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>
-<b>👤 Nama Depan:</b> <code>${escapeHTML(firstName)}</code>
-<b>👥 Nama Belakang:</b> <code>${escapeHTML(lastName)}</code>
-<b>🆔 User ID:</b> <code>${user.id}</code>
-<b>📧 Username:</b> ${escapeHTML(userUsername)}
-<b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}
-<b>💰 Total Spent:</b> Rp${toRupiah(user.total_spent || 0)}
-<b>📊 Total Transaksi:</b> ${user.history ? user.history.length : 0}
-━━━━━━━━━━━━━━━━━━━━━━
-<b>📋 Last 3 Transactions:</b>\n
-${lastTransactions}</blockquote>
-    `.trim();
+    const profileText = `<blockquote><b>🪪 Profile Kamu</b>\n━━━━━━━━━━━━━━━━━━━━━━\n<b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>\n<b>🆔 User ID:</b> <code>${user.id}</code>\n<b>📧 Username:</b> ${escapeHTML(userUsername)}\n<b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}\n<b>💰 Total Spent:</b> Rp${toRupiah(user.total_spent || 0)}\n<b>📊 Total Transaksi:</b> ${user.history ? user.history.length : 0}\n━━━━━━━━━━━━━━━━━━━━━━\n<b>📋 Last 3 Transactions:</b>\n\n${lastTransactions}</blockquote>`;
 
     ctx.reply(profileText, {
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }]
-            ]
-        }
+        parse_mode: "HTML", disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: [[{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }]] }
     }).catch(() => {});
-
-    ctx.deleteMessage().catch(() => {});
 });
+
 
 // ===== HISTORY USER (ACTION) =====
 bot.action("history", async (ctx) => {
-    const fromId = ctx.from.id;
+    await ctx.answerCbQuery().catch(() => {});
+    
+    // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+    try { await ctx.deleteMessage(); } catch (err) { return; }
 
+    const fromId = ctx.from.id;
     const users = loadUsers();
     const user = users.find(u => u.id === fromId);
 
     if (!user || !user.history || user.history.length === 0) {
-        return ctx.answerCbQuery("📭 Belum ada riwayat transaksi", { show_alert: true });
+        return ctx.reply("📭 Belum ada riwayat transaksi.", {
+            reply_markup: { inline_keyboard: [[{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }]] }
+        }).catch(() => {});
     }
-
-    await ctx.answerCbQuery().catch(() => {});
 
     let historyText = `<b>📋 Riwayat Transaksi</b>\n\n`;
 
@@ -2256,9 +2248,8 @@ bot.action("history", async (ctx) => {
             ]
         }
     }).catch(() => {});
-
-    ctx.deleteMessage().catch(() => {});
 });
+
 
 bot.action("buydo", async (ctx) => {
   const doData = loadDO();
@@ -2268,6 +2259,13 @@ bot.action("buydo", async (ctx) => {
     return ctx.answerCbQuery("Stok DO kosong", { show_alert: true });
 
   await ctx.answerCbQuery().catch(() => {});
+
+  // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+  try {
+      await ctx.deleteMessage(); 
+  } catch (err) {
+      return; 
+  }
 
   const categoryButtons = categories.map(cat => [
     {
@@ -2287,15 +2285,21 @@ bot.action("buydo", async (ctx) => {
       reply_markup: { inline_keyboard: categoryButtons }
     }
   ).catch(() => {});
-
-  ctx.deleteMessage().catch(() => {});
 });
+
 
 bot.action("buyvps", async (ctx) => {
   if (!config.apiDigitalOcean)
     return ctx.answerCbQuery("Fitur VPS belum tersedia", { show_alert: true });
 
   await ctx.answerCbQuery().catch(() => {});
+
+  // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+  try {
+      await ctx.deleteMessage(); 
+  } catch (err) {
+      return; 
+  }
 
   const packageButtons = vpsPackages.map(pkg => [
     {
@@ -2315,12 +2319,10 @@ bot.action("buyvps", async (ctx) => {
       reply_markup: { inline_keyboard: packageButtons }
     }
   ).catch(() => {});
-
-  ctx.deleteMessage().catch(() => {});
 });
+
     
 bot.action("buypanel", async (ctx) => {
-  // 🔴 CEK PANEL
   if (!isPanelReady()) {
     return ctx.answerCbQuery(
       "❌ Stok panel sedang kosong, silakan tunggu restock.",
@@ -2329,6 +2331,13 @@ bot.action("buypanel", async (ctx) => {
   }
 
   await ctx.answerCbQuery().catch(() => {});
+
+  // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+  try {
+      await ctx.deleteMessage(); 
+  } catch (err) {
+      return; 
+  }
 
   ctx.reply(
     `<blockquote>🖥️ <b>BUY PANEL</b>\n\n` +
@@ -2344,10 +2353,8 @@ bot.action("buypanel", async (ctx) => {
       }
     }
   ).catch(() => {});
-
-  // 🔥 delete jalan di background (biar cepet)
-  ctx.deleteMessage().catch(() => {});
 });
+
 
 bot.action("buyadmin", async (ctx) => {
   if (!isPanelReady()) {
@@ -2358,6 +2365,13 @@ bot.action("buyadmin", async (ctx) => {
   }
 
   await ctx.answerCbQuery().catch(() => {});
+
+  // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
+  try {
+      await ctx.deleteMessage(); 
+  } catch (err) {
+      return; 
+  }
 
   ctx.reply(
     `<blockquote>👑 <b>BUY ADMIN PANEL</b>\n\n` +
@@ -2372,48 +2386,28 @@ bot.action("buyadmin", async (ctx) => {
         ]
       }
     }
-  );
-
-  // 🔥 delete jalan di background (UX lebih cepat)
-  ctx.deleteMessage().catch(() => {});
+  ).catch(() => {});
 });
+
 
 bot.action("cancel_order", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
+    try { await ctx.deleteMessage(); } catch (err) { return; } // Anti Spam
 
     const userId = ctx.from.id;
     const order = orders[userId];
 
-    if (order) {
-        try {
-            if (order.qrMessageId) {
-                await ctx.telegram.deleteMessage(order.chatId, order.qrMessageId);
-            }
-        } catch (e) {}
+    if (order && order.qrMessageId) {
+        try { await ctx.telegram.deleteMessage(order.chatId, order.qrMessageId); } catch (e) {}
     }
-
     delete orders[userId];
 
-    ctx.telegram.sendMessage(
-        ctx.chat.id,
-        "✅ <b>Order berhasil dibatalkan.</b>\n\nSilakan order ulang atau pilih produk lain melalui tombol di bawah.",
-        {
-            parse_mode: "HTML",
-            reply_markup: {
-                inline_keyboard: [
-                    [
-                        { text: "🛍️ Katalog Produk", callback_data: "katalog"  }
-                    ],
-                    [
-                        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }
-                    ]
-                ]
-            }
-        }
-    ).catch(() => {});
-
-    ctx.deleteMessage().catch(() => {});
+    ctx.reply("✅ <b>Order berhasil dibatalkan.</b>\n\nSilakan order ulang atau pilih produk lain.", {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: [[{ text: "🛍️ Katalog Produk", callback_data: "katalog"  }], [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }]] }
+    }).catch(() => {});
 });
+
 
 // ===== TOP PENGGUNA (LEADERBOARD) =====
 bot.action("top_users", async (ctx) => {
@@ -2503,38 +2497,33 @@ Tingkatkan terus transaksi Anda dan jadilah Top Pengguna di bot kami!
 bot.action("back_to_main_menu", async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
 
-  await ctx.editMessageMedia(
-    {
-      type: "photo",
-      media: config.menuImage,
-      caption: menuTextBot(ctx),
-      parse_mode: "HTML"
-    },
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [ 
-            { text: "🛍️ Katalog Produk", callback_data: "katalog" }
-          ],
-          [
-            { text: "👤 Cek Profil", callback_data: "profile" },
-            { text: "📮 Cek History", callback_data: "history" }
-          ],
-          [
-            { text: "🤝 CODE REFERRAL", callback_data: "menu_referral" }
-          ],
-          [
-            { text: "💳 Deposit Saldo", callback_data: "deposit_menu" },
-            { text: "🏆 Top Pengguna", callback_data: "top_users" }
-          ],
-          [
-            { text: "📢 Channel", url: config.channelLink }
-          ]
-        ]
-      }
+  const captionText = menuTextBot(ctx);
+  const keyboard = {
+    inline_keyboard: [
+      [ { text: "🛍️ Katalog Produk", callback_data: "katalog" } ],
+      [ { text: "👤 Cek Profil", callback_data: "profile" }, { text: "📮 Cek History", callback_data: "history" } ],
+      [ { text: "🤝 CODE REFERRAL", callback_data: "menu_referral" } ],
+      [ { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }, { text: "🏆 Top Pengguna", callback_data: "top_users" } ],
+      [ { text: "📢 Channel", url: config.channelLink } ]
+    ]
+  };
+
+  try {
+    await ctx.editMessageMedia(
+      { type: "photo", media: config.menuImage, caption: captionText, parse_mode: "HTML" },
+      { reply_markup: keyboard }
+    );
+  } catch (err) {
+    // 🔥 FIX: JIKA PESAN SEBELUMNYA CUMA TEKS, HAPUS LALU KIRIM FOTO BARU 🔥
+    if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.menuImage, {
+            caption: captionText, parse_mode: "HTML", reply_markup: keyboard
+        }).catch(() => {});
     }
-  ).catch(() => {});
+  }
 });
+
     
 bot.action("katalog", async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
@@ -2570,22 +2559,20 @@ Pilih kategori produk yang ingin dibeli:</blockquote>
 
   try {
     await ctx.editMessageMedia(
-      {
-        type: "photo",
-        media: config.katalogImage, // bisa beda foto
-        caption: captionText,
-        parse_mode: "HTML"
-      },
-      {
-        reply_markup: storeMenuKeyboard
-      }
+      { type: "photo", media: config.katalogImage, caption: captionText, parse_mode: "HTML" },
+      { reply_markup: storeMenuKeyboard }
     );
   } catch (err) {
-    if (!err.description?.includes("message is not modified")) {
-      console.error(err);
+    // 🔥 FIX: JIKA PESAN SEBELUMNYA CUMA TEKS, HAPUS LALU KIRIM FOTO BARU 🔥
+    if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.katalogImage, {
+            caption: captionText, parse_mode: "HTML", reply_markup: storeMenuKeyboard
+        }).catch(() => {});
     }
   }
 });
+
 
 bot.action("menu_referral", async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
@@ -2665,7 +2652,7 @@ bot.action(/userpage_(\d+)/, async (ctx) => {
 
 // ===== STOCK CATEGORY VIEW =====
 bot.action(/view_category\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const category = ctx.match[1];
@@ -2757,7 +2744,7 @@ bot.action(/view_category\|(.+)/, async (ctx) => {
 
 // === DIGITAL OCEAN CATEGORY VIEW ===
 bot.action(/do_category\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
     const category = ctx.match[1];
     const doData = loadDO();
@@ -2848,7 +2835,7 @@ bot.action(/do_category\|(.+)/, async (ctx) => {
 
 // == DIGITAL OCEAN BUY CATEGORY ===
 bot.action(/do_category_buy\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const category = ctx.match[1];
     const doData = loadDO();
     const items = doData[category];
@@ -2884,7 +2871,7 @@ bot.action(/do_category_buy\|(.+)/, async (ctx) => {
 });
 
     bot.action("back_do_buy_category", async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         const doData = loadDO();
         const categories = Object.keys(doData);
 
@@ -2904,7 +2891,7 @@ bot.action(/do_category_buy\|(.+)/, async (ctx) => {
 
     // ===== DIGITAL OCEAN BUY ITEM =====
     bot.action(/do_item_buy\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         const [category, indexStr] = ctx.match[1].split("|");
         const index = parseInt(indexStr);
         const doData = loadDO();
@@ -2943,8 +2930,8 @@ bot.action(/do_category_buy\|(.+)/, async (ctx) => {
 
     // ===== KONFIRMASI PEMBAYARAN DO =====
     bot.action(/confirm_do_payment\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const [category, indexStr] = ctx.match[1].split("|");
         const index = parseInt(indexStr);
@@ -3006,7 +2993,7 @@ bot.action(/do_category_buy\|(.+)/, async (ctx) => {
 
 // ===== CATEGORY PAGE CALLBACK (STOCK) =====
 bot.action(/category_page\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const [category, pageStr] = ctx.match[1].split("|");
@@ -3096,7 +3083,7 @@ bot.action(/category_page\|(.+)/, async (ctx) => {
 
 // ===== DIGITAL OCEAN CATEGORY PAGE CALLBACK =====
 bot.action(/do_category_page\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const [category, pageStr] = ctx.match[1].split("|");
@@ -3186,7 +3173,7 @@ bot.action(/do_category_page\|(.+)/, async (ctx) => {
 
 // ===== STOCK ITEM DETAIL (HTML) =====
 bot.action(/stock_detail\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const [category, itemIndexStr, accountIndexStr] = ctx.match[1].split("|");
@@ -3237,7 +3224,7 @@ bot.action(/stock_detail\|(.+)/, async (ctx) => {
 
 // ===== DIGITAL OCEAN ITEM DETAIL (HTML) =====
 bot.action(/do_detail\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const [category, itemIndexStr, accountIndexStr] = ctx.match[1].split("|");
@@ -3288,7 +3275,7 @@ bot.action(/do_detail\|(.+)/, async (ctx) => {
 
 // ===== DELETE STOCK ITEM (HTML) =====
 bot.action(/del_stock_item\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const [category, itemIndexStr, accountIndexStr] = ctx.match[1].split("|");
@@ -3351,7 +3338,7 @@ bot.action(/del_stock_item\|(.+)/, async (ctx) => {
 
 // ===== DELETE DIGITAL OCEAN ITEM (HTML) =====
 bot.action(/del_do_item\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const [category, itemIndexStr, accountIndexStr] = ctx.match[1].split("|");
@@ -3414,7 +3401,7 @@ bot.action(/del_do_item\|(.+)/, async (ctx) => {
 
 // ===== DELETE CATEGORY (HTML) =====
 bot.action(/del_category\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const category = ctx.match[1];
@@ -3444,7 +3431,7 @@ bot.action(/del_category\|(.+)/, async (ctx) => {
 
 // ===== DELETE DIGITAL OCEAN CATEGORY (HTML) =====
 bot.action(/del_do_category\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const category = ctx.match[1];
@@ -3474,7 +3461,7 @@ bot.action(/del_do_category\|(.+)/, async (ctx) => {
 
 // ===== BACK TO STOCK CATEGORIES (HTML) =====
 bot.action("back_to_categories", async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const stocks = loadStocks();
@@ -3502,7 +3489,7 @@ bot.action("back_to_categories", async (ctx) => {
 
 // ===== BACK TO DIGITAL OCEAN CATEGORIES (HTML) =====
 bot.action("back_to_do_categories", async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const doData = loadDO();
@@ -3529,11 +3516,11 @@ bot.action("back_to_do_categories", async (ctx) => {
 });
 
     bot.action("noop", async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
     });
 
     bot.action("back_stock_category", async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         const stocks = loadStocks();
         const categories = Object.keys(stocks);
 
@@ -3556,7 +3543,7 @@ bot.action("back_to_do_categories", async (ctx) => {
     });
 
 bot.action(/app_category\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const category = ctx.match[1];
     const stocks = loadStocks();
     const items = stocks[category];
@@ -3592,7 +3579,7 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
 });
 
     bot.action(/app_item\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         const [category, indexStr] = ctx.match[1].split("|");
         const index = parseInt(indexStr);
         const stocks = loadStocks();
@@ -3630,7 +3617,7 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
     });
     
         bot.action(/confirm_app_payment\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         
         const [category, indexStr] = ctx.match[1].split("|");
         const index = parseInt(indexStr);
@@ -3667,8 +3654,8 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
 
     // ===== KONFIRMASI PEMBAYARAN APP =====
     bot.action(/pay_qris_app\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const [category, indexStr] = ctx.match[1].split("|");
         const index = parseInt(indexStr);
@@ -3729,8 +3716,8 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
         startCheck(userId, ctx);
     });
     bot.action(/pay_saldo_app\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const [category, indexStr] = ctx.match[1].split("|");
         const index = parseInt(indexStr);
@@ -3841,7 +3828,7 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
 
 // Handler untuk kembali ke pilihan paket
 bot.action(/back_to_packages/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
 
     const packageButtons = vpsPackages.map((pkg) => [
         {
@@ -3858,7 +3845,7 @@ bot.action(/back_to_packages/, async (ctx) => {
 
 // ===== VPS STEP 1: Pilih RAM & CPU (satu set) =====
 bot.action(/vps_step1\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const specKey = ctx.match[1];
 
     if (!vpsSpecs[specKey]) {
@@ -3900,7 +3887,7 @@ bot.action(/vps_step1\|(.+)/, async (ctx) => {
 
 // ===== VPS STEP 2: Pilih OS =====
 bot.action(/vps_step2\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const [specKey, osKey] = ctx.match[1].split("|");
 
     if (!vpsSpecs[specKey]) {
@@ -3948,7 +3935,7 @@ bot.action(/vps_step2\|(.+)/, async (ctx) => {
 
 // ===== VPS STEP 3: Pilih Region dan Tampilkan KONFIRMASI =====
 bot.action(/vps_step3\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const [specKey, osKey, regionKey] = ctx.match[1].split("|");
 
     if (!vpsSpecs[specKey]) {
@@ -4013,8 +4000,8 @@ bot.action(/vps_step3\|(.+)/, async (ctx) => {
 
 // ===== KONFIRMASI PEMBAYARAN VPS =====
 bot.action(/confirm_vps_payment\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
-    await ctx.deleteMessage();
+    await ctx.answerCbQuery().catch(() => {});
+    try { await ctx.deleteMessage(); } catch (e) { return; }
 
     const [specKey, osKey, regionKey] = ctx.match[1].split("|");
 
@@ -4103,7 +4090,7 @@ bot.action(/confirm_vps_payment\|(.+)/, async (ctx) => {
 });
 
 bot.action(/delstock_cat\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const category = ctx.match[1];
@@ -4130,7 +4117,7 @@ bot.action(/delstock_cat\|(.+)/, async (ctx) => {
 });
 
 bot.action(/delstock_item\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const [category, indexStr] = ctx.match[1].split("|");
@@ -4162,7 +4149,7 @@ bot.action(/delstock_item\|(.+)/, async (ctx) => {
 
 // ===== GET SCRIPT DETAIL =====
 bot.action(/getscript_detail\|(\d+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
     const index = Number(ctx.match[1]);
 
@@ -4195,7 +4182,7 @@ bot.action(/getscript_detail\|(\d+)/, async (ctx) => {
 
 // ===== DOWNLOAD SCRIPT =====
 bot.action(/download_script\|(\d+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
     const index = Number(ctx.match[1]);
 
@@ -4215,7 +4202,7 @@ bot.action(/download_script\|(\d+)/, async (ctx) => {
 
 // ===== BACK TO SCRIPT LIST =====
 bot.action("back_to_script_list", async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
     const allScripts = loadScripts();
@@ -4233,7 +4220,7 @@ bot.action("back_to_script_list", async (ctx) => {
 
 // ===== DELETE SCRIPT =====
 bot.action(/del_script\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
     const name = ctx.match[1];
 
@@ -4261,7 +4248,7 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
 });
 
     bot.action(/panel_ram\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         const params = ctx.match[1].split("|");
         const ram = params[0];
         const username = params[1];
@@ -4298,7 +4285,7 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
 
     // ===== OPSI PEMBAYARAN PANEL =====
     bot.action(/confirm_panel_payment\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         
         const [ram, username] = ctx.match[1].split("|");
         const userId = ctx.from.id;
@@ -4328,8 +4315,8 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
 
     // ===== BAYAR PANEL VIA QRIS =====
     bot.action(/pay_qris_panel\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const [ram, username] = ctx.match[1].split("|");
         const userId = ctx.from.id;
@@ -4352,8 +4339,8 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
 
     // ===== BAYAR PANEL VIA SALDO =====
     bot.action(/pay_saldo_panel\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const [ram, username] = ctx.match[1].split("|");
         const userId = ctx.from.id;
@@ -4396,7 +4383,7 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
 
 
 bot.action(/^script\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
     const name = ctx.match[1];
     const scripts = loadScripts();
     const sc = scripts.find(s => s.name === name);
@@ -4441,7 +4428,7 @@ ${escapeHTML(sc.desk || "-")}
 
     // ===== OPSI PEMBAYARAN SCRIPT =====
     bot.action(/confirm_script\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         const name = ctx.match[1];
         const userId = ctx.from.id;
 
@@ -4474,8 +4461,8 @@ ${escapeHTML(sc.desk || "-")}
 
     // ===== BAYAR SCRIPT VIA QRIS =====
     bot.action(/pay_qris_script\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const name = ctx.match[1];
         const userId = ctx.from.id;
@@ -4519,8 +4506,8 @@ ${escapeHTML(sc.desk || "-")}
 
     // ===== BAYAR SCRIPT VIA SALDO =====
     bot.action(/pay_saldo_script\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const name = ctx.match[1];
         const userId = ctx.from.id;
@@ -4582,7 +4569,7 @@ ${escapeHTML(sc.desk || "-")}
 
 
 bot.action("back_to_script", async (ctx) => {
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
 
     const scriptsList = loadScripts();
     if (!scriptsList.length)
@@ -4609,7 +4596,7 @@ bot.action("back_to_script", async (ctx) => {
 
     // ===== OPSI PEMBAYARAN ADMIN =====
     bot.action(/confirm_admin\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         
         const user = ctx.match[1];
         const userId = ctx.from.id;
@@ -4636,8 +4623,8 @@ bot.action("back_to_script", async (ctx) => {
 
     // ===== BAYAR ADMIN VIA QRIS =====
     bot.action(/pay_qris_admin\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const user = ctx.match[1];
         const userId = ctx.from.id;
@@ -4657,8 +4644,8 @@ bot.action("back_to_script", async (ctx) => {
 
     // ===== BAYAR ADMIN VIA SALDO =====
     bot.action(/pay_saldo_admin\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
-        await ctx.deleteMessage();
+        await ctx.answerCbQuery().catch(() => {});
+        try { await ctx.deleteMessage(); } catch (e) { return; }
 
         const username = ctx.match[1];
         const userId = ctx.from.id;
@@ -5360,7 +5347,7 @@ Password: <code>${password}</code>
 
     // Handler untuk melihat profile user dari notifikasi owner
     bot.action(/view_profile\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
 
         const userId = ctx.match[1];
@@ -5415,7 +5402,7 @@ ${lastTransactions}`;
     });
 
     bot.action("back_to_notification", async (ctx) => {
-        await ctx.answerCbQuery();
+        await ctx.answerCbQuery().catch(() => {});
         return ctx.editMessageText("Kembali ke notifikasi...");
     });
 
