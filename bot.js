@@ -9,6 +9,7 @@ const scriptDir = path.join(__dirname, "scripts");
 const scriptDB = path.join(__dirname, "/db/scripts.json");
 const userDB = path.join(__dirname, "/db/users.json");
 const stockDB = path.join(__dirname, "/db/stocks.json");
+const voucherDB = path.join(__dirname, "/db/vouchers.json");
 const hargaPanel = require("./price/panel.js");
 const hargaAdminPanel = require("./price/adminpanel.js");
 const vpsPackages = require("./price/vps.js");
@@ -22,6 +23,7 @@ if (!fs.existsSync(scriptDB)) fs.writeFileSync(scriptDB, "[]");
 if (!fs.existsSync(userDB)) fs.writeFileSync(userDB, "[]");
 if (!fs.existsSync(stockDB)) fs.writeFileSync(stockDB, "{}");
 if (!fs.existsSync(doDB)) fs.writeFileSync(doDB, "{}");
+if (!fs.existsSync(voucherDB)) fs.writeFileSync(voucherDB, "{}");
 
 // Load database
 const loadScripts = () => JSON.parse(fs.readFileSync(scriptDB));
@@ -32,6 +34,9 @@ const loadStocks = () => JSON.parse(fs.readFileSync(stockDB));
 const saveStocks = (d) => fs.writeFileSync(stockDB, JSON.stringify(d, null, 2));
 const loadDO = () => JSON.parse(fs.readFileSync(doDB));
 const saveDO = (d) => fs.writeFileSync(doDB, JSON.stringify(d, null, 2));
+const loadVouchers = () => JSON.parse(fs.readFileSync(voucherDB));
+const saveVouchers = (d) => fs.writeFileSync(voucherDB, JSON.stringify(d, null, 2));
+
 
 // ===================== FUNGSI UTILITAS =====================
 
@@ -1065,16 +1070,51 @@ bot.action("deladmin-back", async (ctx) => {
             return processDeposit(ctx, amount, fromId);
         }
 
-        // ===== ADD USER KE DATABASE =====
-        fromId ? addUser({
-            id: fromId,
-            username: userName,
-            first_name: ctx.from.first_name,
-            last_name: ctx.from.last_name || "",
-            join_date: new Date().toISOString(),
-            total_spent: 0,
-            history: []
-        }) : ""
+        // ===== ADD USER & REFERRAL LOGIC =====
+        if (fromId) {
+            const users = loadUsers();
+            const existingUser = users.find(u => u.id === fromId);
+            
+            if (!existingUser) {
+                let inviterId = null;
+                
+                // Cek apakah mendaftar lewat link referral
+                if (command === "start" && args[0] && args[0].startsWith("ref_")) {
+                    inviterId = parseInt(args[0].split("_")[1]);
+                }
+                
+                const userToAdd = {
+                    id: fromId,
+                    username: userName,
+                    first_name: ctx.from.first_name,
+                    last_name: ctx.from.last_name || "",
+                    join_date: new Date().toISOString(),
+                    total_spent: 0,
+                    history: [],
+                    balance: 0,
+                    referrals: 0, // Hitung teman yang diundang
+                    ref_earnings: 0 // Hitung total pendapatan dari reff
+                };
+                
+                users.push(userToAdd);
+                
+                // Berikan reward ke pengundang
+                if (inviterId && inviterId !== fromId) {
+                    const inviterIndex = users.findIndex(u => u.id === inviterId);
+                    if (inviterIndex !== -1) {
+                        const bonus = 1000; // Nominal bonus referral (Silakan diubah)
+                        users[inviterIndex].balance = (users[inviterIndex].balance || 0) + bonus;
+                        users[inviterIndex].referrals = (users[inviterIndex].referrals || 0) + 1;
+                        users[inviterIndex].ref_earnings = (users[inviterIndex].ref_earnings || 0) + bonus;
+                        
+                        // Notif ke pengundang
+                        ctx.telegram.sendMessage(inviterId, `🎉 <b>HORE!</b>\nSeseorang telah bergabung menggunakan link referral kamu!\n💰 Saldo kamu bertambah Rp${bonus.toLocaleString('id-ID')}`, { parse_mode: "HTML" }).catch(() => {});
+                    }
+                }
+                saveUsers(users);
+            }
+        }
+
 
 
         switch (command) {
@@ -1120,6 +1160,73 @@ bot.action("deladmin-back", async (ctx) => {
                     }
                 });
             }
+// ===== FITUR VOUCHER & REFFERAL =====
+
+case "addvoucher": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    if (args.length < 3) return ctx.reply(`Format: ${config.prefix}addvoucher [kode] [nominal] [kuota]\nContoh: ${config.prefix}addvoucher PROMO10K 10000 50`);
+    
+    const kode = args[0].toUpperCase();
+    const nominal = parseInt(args[1]);
+    const kuota = parseInt(args[2]);
+    
+    if (isNaN(nominal) || isNaN(kuota)) return ctx.reply("❌ Nominal dan kuota harus berupa angka!");
+    
+    const vouchers = loadVouchers();
+    if (vouchers[kode]) return ctx.reply("❌ Kode voucher ini sudah ada di database!");
+
+    vouchers[kode] = { 
+        nominal, 
+        kuota, 
+        claimedBy: [], 
+        created_at: new Date().toISOString() 
+    };
+    saveVouchers(vouchers);
+    
+    return ctx.reply(`✅ <b>Voucher Berhasil Dibuat!</b>\n\n🎟 Kode: <code>${kode}</code>\n💰 Nominal: Rp${nominal.toLocaleString('id-ID')}\n👥 Kuota: ${kuota} orang`, { parse_mode: "HTML" });
+}
+
+case "redeem": {
+    if (args.length < 1) return ctx.reply(`Ketik kode vouchernya bos!\nContoh: ${config.prefix}redeem KODE`);
+    const kode = args[0].toUpperCase();
+    
+    const vouchers = loadVouchers();
+    if (!vouchers[kode]) return ctx.reply("❌ Kode voucher tidak ditemukan atau salah.");
+    
+    const voucher = vouchers[kode];
+    if (voucher.kuota <= 0) return ctx.reply("❌ Maaf, kuota voucher ini sudah habis.");
+    if (voucher.claimedBy.includes(fromId)) return ctx.reply("❌ Kamu sudah pernah klaim voucher ini!");
+    
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id === fromId);
+    if (userIndex === -1) return ctx.reply("❌ Error: User tidak ditemukan."); 
+    
+    // Tambah saldo & kurangi kuota
+    users[userIndex].balance = (users[userIndex].balance || 0) + voucher.nominal;
+    voucher.kuota -= 1;
+    voucher.claimedBy.push(fromId);
+    
+    saveUsers(users);
+    saveVouchers(vouchers);
+    
+    return ctx.reply(`🎉 <b>SELAMAT!</b>\n\nKamu berhasil menukarkan kode voucher <code>${kode}</code>.\n💰 Saldo bertambah Rp${voucher.nominal.toLocaleString('id-ID')}\n💳 Saldo sekarang: Rp${users[userIndex].balance.toLocaleString('id-ID')}`, { parse_mode: "HTML" });
+}
+
+case "ref":
+case "referral": {
+    const botUser = await ctx.telegram.getMe();
+    const refLink = `https://t.me/${botUser.username}?start=ref_${fromId}`;
+    
+    const users = loadUsers();
+    const myUser = users.find(u => u.id === fromId);
+    const myRefs = myUser.referrals || 0;
+    const myEarnings = myUser.ref_earnings || 0;
+    
+    const text = `🤝 <b>SISTEM REFERRAL</b>\n\nAjak temanmu menggunakan bot ini dan dapatkan saldo gratis <b>Rp1.000</b> untuk setiap teman yang mendaftar dan menekan /start melalui link kamu!\n\n🔗 <b>Link Referral Kamu:</b>\n<code>${refLink}</code>\n\n📊 <b>Statistik Kamu:</b>\n👥 Teman diundang: ${myRefs} orang\n💰 Total bonus didapat: Rp${myEarnings.toLocaleString('id-ID')}`;
+    
+    return ctx.reply(text, { parse_mode: "HTML", disable_web_page_preview: true });
+}
+
 
 // ===== FITUR SALDO & DEPOSIT =====
 case "deposit":
@@ -2138,7 +2245,10 @@ bot.action("back_to_main_menu", async (ctx) => {
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🛍️ Katalog Produk", callback_data: "katalog" }],
+          [ 
+            { text: "🛍️ Katalog Produk", callback_data: "katalog" }, 
+            { text: "🤝 REFERRAL SYSTEM", callback_data: "menu_referral" }
+          ],
           [
             { text: "👤 Cek Profil", callback_data: "profile" },
             { text: "📮 Cek History", callback_data: "history" }
@@ -2203,6 +2313,73 @@ Pilih kategori produk yang ingin dibeli:</blockquote>
     }
   }
 });
+
+bot.action("menu_referral", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+
+  const fromId = ctx.from.id;
+  
+  // Ambil Data User
+  const users = loadUsers();
+  const myUser = users.find(u => u.id === fromId);
+
+  // Siapkan Data Statistik & Link
+  const myRefs = myUser ? (myUser.referrals || 0) : 0;
+  const myEarnings = myUser ? (myUser.ref_earnings || 0) : 0;
+  const refLink = `https://t.me/${config.botUsername}?start=ref_${fromId}`;
+
+  // Keyboard Menu
+  const referralKeyboard = {
+    inline_keyboard: [
+      [
+        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
+      ]
+    ]
+  };
+
+  // Caption / Teks Menu Referral
+  const captionText = `
+<blockquote><b>🤝 PROGRAM REFERRAL</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Dapatkan saldo gratis dengan cara mengajak temanmu menggunakan bot ini!</blockquote>
+
+Setiap teman yang mendaftar melalui link kamu, kamu akan mendapatkan bonus saldo.
+
+🎁 <b>Bonus Reward:</b> Rp1.000 / teman
+(Bonus otomatis masuk ke saldo bot kamu)
+
+👇 <b>Link Referral Unik Kamu:</b>
+<code>${refLink}</code>
+<i>(Tap link di atas untuk menyalin)</i>
+
+📊 <b>Statistik Kamu Saat Ini:</b>
+👥 Teman diundang: <b>${myRefs} Orang</b>
+💰 Total pendapatan: <b>Rp${myEarnings.toLocaleString('id-ID')}</b>
+`.trim();
+
+  // URL Gambar Referral (Silakan ganti dengan URL gambar lu atau gunakan yang sudah gue buatkan)
+  const imageUrl = "https://tmpfiles.org/dl/25574179/file_000000004fe07206b5eeabf4aac9a109.png"; // Bisa juga pakai config.referralImage kalau mau disimpen di config.js
+
+  try {
+    await ctx.editMessageMedia(
+      {
+        type: "photo",
+        media: imageUrl,
+        caption: captionText,
+        parse_mode: "HTML"
+      },
+      {
+        reply_markup: referralKeyboard
+      }
+    );
+  } catch (err) {
+    if (!err.description?.includes("message is not modified")) {
+      console.error("Error edit menu referral:", err);
+    }
+  }
+});
+
+
 
 bot.action(/userpage_(\d+)/, async (ctx) => {
     const page = parseInt(ctx.match[1]);
