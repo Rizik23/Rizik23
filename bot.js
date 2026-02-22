@@ -123,6 +123,58 @@ const getBotStats = (db) => {
   }
 }
 
+// ===== FUNGSI LIHAT SEMUA SALDO (OWNER) =====
+async function sendSaldoPage(ctx, page = 0) {
+    const users = loadUsers();
+    if (!users || users.length === 0) {
+        return ctx.reply("📭 Belum ada user terdaftar.");
+    }
+
+    // Urutkan user dari saldo terbanyak ke terkecil
+    const sortedUsers = [...users].sort((a, b) => (b.balance || 0) - (a.balance || 0));
+
+    const USERS_PER_PAGE = 10;
+    const totalPages = Math.ceil(sortedUsers.length / USERS_PER_PAGE);
+    const start = page * USERS_PER_PAGE;
+    const end = start + USERS_PER_PAGE;
+
+    // Hitung total uang/saldo yang berputar di bot
+    const totalSaldoSystem = users.reduce((sum, u) => sum + (u.balance || 0), 0);
+
+    let text = `<blockquote><b>💰 DAFTAR SALDO SEMUA USER</b></blockquote>\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `📊 <b>Total Saldo Sistem:</b> Rp${totalSaldoSystem.toLocaleString('id-ID')}\n`;
+    text += `👥 <b>Total User:</b> ${users.length}\n`;
+    text += `📄 <b>Halaman:</b> ${page + 1} / ${totalPages}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    sortedUsers.slice(start, end).forEach((u, i) => {
+        const fullName = (u.first_name || "") + (u.last_name ? " " + u.last_name : "");
+        const username = u.username ? "@" + u.username : "-";
+        
+        text += `<b>${start + i + 1}. ${escapeHTML(fullName || "No Name")}</b>\n`;
+        text += `🆔 <code>${u.id}</code> | 👤 ${escapeHTML(username)}\n`;
+        text += `💳 <b>Saldo:</b> Rp${(u.balance || 0).toLocaleString('id-ID')}\n\n`;
+    });
+
+    const buttons = [];
+    if (page > 0) {
+        buttons.push({ text: "⬅️ Prev", callback_data: `saldopage_${page - 1}` });
+    }
+    if (page < totalPages - 1) {
+        buttons.push({ text: "Next ➡️", callback_data: `saldopage_${page + 1}` });
+    }
+
+    const keyboard = { inline_keyboard: buttons.length > 0 ? [buttons] : [] };
+
+    if (ctx.callbackQuery) {
+        await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup: keyboard });
+    } else {
+        await ctx.reply(text, { parse_mode: "HTML", reply_markup: keyboard });
+    }
+}
+
+
 async function broadcastNewProduct(ctx, type, name, description, price, cmds) {
   const users = loadUsers();
 
@@ -525,7 +577,7 @@ async function notifyOwner(ctx, orderData, buyerInfo) {
 <blockquote>💰 <b>ORDER BERHASIL DIPROSES!</b></blockquote>
 <blockquote>━━━━━━━━━━━━━━━━━━━━━━
 🕒 Waktu: ${waktu}
-📦 Produk: ${escapeHTML(orderData.name)}
+📦 Produk: ${orderData.type === 'subdo' ? 'Jasa Create Subdomain' : escapeHTML(orderData.name)}
 💰 Total: Rp${toRupiah(orderData.amount)}
 👤 Buyer: ${buyerName}
 🆔 User ID: <code>${buyerInfo.id}</code>
@@ -1504,6 +1556,13 @@ case "userlist": {
     return sendUserPage(ctx, 0);
 }
 
+// ===== LIHAT SEMUA SALDO (OWNER ONLY) =====
+case "lihatallsaldo":
+case "allsaldo": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    return sendSaldoPage(ctx, 0);
+}
+
 // ===== ADD SCRIPT =====
 case "addscript": {
     if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
@@ -1977,10 +2036,8 @@ case "buysubdo": {
         parse_mode: "HTML",
         reply_markup: { inline_keyboard: domainButtons }
     });
-}
-
-        } // <--- INI KURUNG PENUTUP SWITCH COMMAND
-    }); // <--- INI KURUNG PENUTUP BOT.ON("TEXT") YANG BIKIN ERROR KEMARIN
+  }} 
+});
 
 bot.action("buyprompt", async (ctx) => {
     const promptsList = loadPrompts();
@@ -2492,6 +2549,14 @@ bot.action("cancel_order", async (ctx) => {
         parse_mode: "HTML",
         reply_markup: { inline_keyboard: [[{ text: "🛍️ Katalog Produk", callback_data: "katalog"  }], [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }]] }
     }).catch(() => {});
+});
+
+bot.action(/saldopage_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1]);
+    if (!isOwner(ctx)) return ctx.answerCbQuery("❌ Owner Only!", { show_alert: true });
+    
+    await ctx.answerCbQuery().catch(() => {});
+    await sendSaldoPage(ctx, page);
 });
 
 
