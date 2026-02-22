@@ -3788,7 +3788,7 @@ ${escapeHTML(sc.desk || "-")}
         reply_markup: {
             inline_keyboard: [
                 [
-                    { text: "✅ Konfirmasi", callback_data: `confirm_script|${escapeHTML(sc.name)}` },
+                    { text: "✅ Konfirmasi", callback_data: `confirm_script|${sc.name}` }
                     { text: "❌ Batalkan", callback_data: "back_to_script" }
                 ]
             ]
