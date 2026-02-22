@@ -1,7 +1,7 @@
 module.exports = {
 
  // ==== Bot Setting ========
-  botToken: "8542010252:AAGiMXol_TwOmdbWGP52KPXQABas4jZGkf4,
+  botToken: "8542010252:AAGiMXol_TwOmdbWGP52KPXQABas4jZGkf4",
   botUsername: "ElikaMd_bot",
   menuImage: "https://tmpfiles.org/dl/25539099/1771702158731.png",
   katalogImage: "https://tmpfiles.org/dl/25538833/file_000000003d2472089efb8382ea472f0c.png",
