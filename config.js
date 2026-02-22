@@ -57,10 +57,6 @@ module.exports = {
   
   // ===== Setting Api Subdomain ===
   subdomain: {
-    "pterovip.my.id": {
-      "zone": "4b262004a90e37c8656accb7087c4150",
-      "apitoken": "wb4wjXwwdpIQ9Ezi_zfi0-0fWQD9BYYyTk-1ad4N"
-    }, 
     "pteroweb.my.id": {
       "zone": "714e0f2e54a90875426f8a6819f782d0",
       "apitoken": "SbRAPRzC34ccmf4cJs-0qZ939yHe3Ko6CpolxqW4"
@@ -71,18 +67,6 @@ module.exports = {
     },
     "privatserver.my.id": {
       "zone": "699bb9eb65046a886399c91daacb1968",
-      "apitoken": "SbRAPRzC34ccmf4cJs-0qZ939yHe3Ko6CpolxqW4"
-    },
-    "serverku.biz.id": {
-      "zone": "4e4feaba70b41ed78295d2dcc090dd3a",
-      "apitoken": "SbRAPRzC34ccmf4cJs-0qZ939yHe3Ko6CpolxqW4"
-    },
-    "vipserver.web.id": {
-      "zone": "e305b750127749c9b80f41a9cf4a3a53",
-      "apitoken": "SbRAPRzC34ccmf4cJs-0qZ939yHe3Ko6CpolxqW4"
-    }, 
-    "mypanelstore.web.id": {
-      "zone": "c61c442d70392500611499c5af816532",
       "apitoken": "SbRAPRzC34ccmf4cJs-0qZ939yHe3Ko6CpolxqW4"
     }
   }

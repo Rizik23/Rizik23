@@ -16,8 +16,10 @@ const hargaPanel = require("./price/panel.js");
 const hargaAdminPanel = require("./price/adminpanel.js");
 const vpsPackages = require("./price/vps.js");
 const doDB = path.join(__dirname, "/db/digitalocean.json");
+
 const orders = {};
 const pendingDeposit = {};
+const activeMenus = {};
 
 // Inisialisasi database
 if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir);
@@ -488,9 +490,22 @@ async function notifyOwner(ctx, orderData, buyerInfo) {
         productDetails = `📱 Kategori: ${escapeHTML(orderData.category)}
 📝 Deskripsi: ${escapeHTML(orderData.description || "-")}`;
         break;
-        case "subdo":
-        productDetails = `🌐 Subdomain: ${escapeHTML(orderData.name)}\n📌 Pointing IP: <code>${escapeHTML(orderData.ip)}</code>`;
+        case "subdo": {
+        // Sensor IP: Cuma nampilin angka depan (Contoh: 192.168.1.1 -> 192.***.***.***)
+        const ipSplit = orderData.ip ? orderData.ip.split(".") : [];
+        const maskedIp = ipSplit.length === 4 ? `${ipSplit[0]}.***.***.***` : "***.***.***.***";
+        
+        // Sensor Domain: Cuma sensor nama depannya aja (Contoh: zaynn.private.my.id -> ***.private.my.id)
+        const domainSplit = orderData.name ? orderData.name.split(".") : [];
+        let maskedDomain = orderData.name;
+        if (domainSplit.length >= 2) {
+            domainSplit[0] = "***"; // Mengubah array pertama (nama subdomain) jadi bintang
+            maskedDomain = domainSplit.join(".");
+        }
+
+        productDetails = `🌐 Subdomain: ${escapeHTML(maskedDomain)}\n📌 Pointing IP: <code>${escapeHTML(maskedIp)}</code>`;
         break;
+      }
       case "do":
         productDetails = `🌊 Kategori: ${escapeHTML(orderData.category)}
 📝 Deskripsi: ${escapeHTML(orderData.description || "-")}`;
@@ -1211,33 +1226,6 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
                     }
                 });
             }
-// ===== BUY SUBDOMAIN =====
-case "buysubdomain":
-case "buysubdo": {
-    if (!args[0] || !args[1]) {
-        return ctx.reply(`❌ Format salah!\n\nKetik: <code>${config.prefix}buysubdo namasubdomain ip_vps</code>\nContoh: <code>${config.prefix}buysubdo serverku 192.168.1.1</code>`, { parse_mode: "HTML" });
-    }
-    
-    // Bersihkan input agar tidak ada spasi atau simbol aneh
-    const host = args[0].toLowerCase().replace(/[^a-z0-9-]/g, ""); 
-    const ip = args[1].replace(/[^0-9.]/g, "");
-
-    if (!host || !ip) return ctx.reply("❌ Hostname atau IP tidak valid.");
-
-    const domains = Object.keys(config.subdomain);
-    if (!domains.length) return ctx.reply("❌ Sistem error: Konfigurasi API domain belum di-setting oleh Owner.");
-
-    const domainButtons = domains.map(dom => ([
-        { text: `🌐 .${dom}`, callback_data: `sub_sel|${host}|${ip}|${dom}` }
-    ]));
-
-    return ctx.reply(`Pilih Domain Induk untuk <b>${host}</b>:`, {
-        parse_mode: "HTML",
-        reply_markup: { inline_keyboard: domainButtons }
-    });
-}
-
-
 
 // ===== FITUR VOUCHER & REFFERAL =====
 case "addvoucher": {
@@ -1905,9 +1893,15 @@ case "delstockdo": {
     );
 }
 
-            case "buypanel": {
+case "buypanel": {
     if (!text) return ctx.reply(`Ketik ${config.prefix}buypanel username untuk membeli panel.`);
     if (text.includes(" ")) return ctx.reply("Format username dilarang memakai spasi!");
+    
+    // 🔥 HAPUS MENU PANDUAN SEBELUMNYA 🔥
+    if (activeMenus[fromId]) {
+        try { await ctx.telegram.deleteMessage(ctx.chat.id, activeMenus[fromId]); delete activeMenus[fromId]; } catch (e) {}
+    }
+
     const user = text;
     const panelButtons = [];
     const dataPanel = Object.keys(hargaPanel)
@@ -1924,38 +1918,67 @@ case "delstockdo": {
     });
 }
 
-            // ===== BUY ADMIN =====
-           case "buyadp":  
-           case "buyadmin": {
-                if (!text)
-                    return ctx.reply(`Ketik ${config.prefix}buyadmin username untuk membeli admin panel.`);
-                if (text.includes(" "))
-                    return ctx.reply("Format username dilarang memakai spasi!");
 
-                const fee = generateRandomFee();
-                const price = hargaAdminPanel
-                const name = "Admin Panel";
-                const user = text;
+case "buyadp":  
+case "buyadmin": {
+    if (!text)
+        return ctx.reply(`Ketik ${config.prefix}buyadmin username untuk membeli admin panel.`);
+    if (text.includes(" "))
+        return ctx.reply("Format username dilarang memakai spasi!");
 
-                // Menampilkan konfirmasi dulu sebelum ke pembayaran
-                return ctx.reply(createConfirmationText("admin", name, price, fee, { username: user }), {
-                    parse_mode: "html",
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: "✅ Lanjut Pembayaran", callback_data: `confirm_admin|${user}` },
-                                { text: "❌ Batalkan", callback_data: "cancel_order" }
-                            ]
-                        ]
-                    }
-                });
-            }
-            
-            default: {
-                break;
-            }
+    // 🔥 HAPUS MENU PANDUAN SEBELUMNYA 🔥
+    if (activeMenus[fromId]) {
+        try { await ctx.telegram.deleteMessage(ctx.chat.id, activeMenus[fromId]); delete activeMenus[fromId]; } catch (e) {}
+    }
+
+    const fee = generateRandomFee();
+    const price = hargaAdminPanel
+    const name = "Admin Panel";
+    const user = text;
+
+    // Menampilkan konfirmasi dulu sebelum ke pembayaran
+    return ctx.reply(createConfirmationText("admin", name, price, fee, { username: user }), {
+        parse_mode: "html",
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: "✅ Lanjut Pembayaran", callback_data: `confirm_admin|${user}` },
+                    { text: "❌ Batalkan", callback_data: "cancel_order" }
+                ]
+            ]
         }
     });
+}
+
+// ===== BUY SUBDOMAIN =====
+case "buysubdomain":
+case "buysubdo": {
+    if (!args[0] || !args[1]) return ctx.reply(`❌ Format salah!\n\nKetik: <code>${config.prefix}buysubdo namasubdomain ip_vps</code>\nContoh: <code>${config.prefix}buysubdo serverku 192.168.1.1</code>`, { parse_mode: "HTML" });
+    
+    const host = args[0].toLowerCase().replace(/[^a-z0-9-]/g, ""); 
+    const ip = args[1].replace(/[^0-9.]/g, "");
+
+    if (!host || !ip) return ctx.reply("❌ Hostname atau IP tidak valid.");
+
+    // 🔥 HAPUS MENU PANDUAN SEBELUMNYA 🔥
+    if (activeMenus[fromId]) {
+        try { await ctx.telegram.deleteMessage(ctx.chat.id, activeMenus[fromId]); delete activeMenus[fromId]; } catch (e) {}
+    }
+
+    const domains = Object.keys(config.subdomain);
+    if (!domains.length) return ctx.reply("❌ Sistem error: Konfigurasi API domain belum di-setting oleh Owner.");
+
+    const domainButtons = domains.map(dom => ([
+        { text: `🌐 .${dom}`, callback_data: `sub_sel|${host}|${ip}|${dom}` }
+    ]));
+
+    return ctx.reply(`Pilih Domain Induk untuk <b>${host}</b>:`, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: domainButtons }
+    });
+}
+
+
 
 bot.action("buyprompt", async (ctx) => {
     const promptsList = loadPrompts();
@@ -2289,6 +2312,8 @@ bot.action("buydo", async (ctx) => {
     return ctx.answerCbQuery("Stok DO kosong", { show_alert: true });
 
   await ctx.answerCbQuery().catch(() => {});
+  
+  activeMenus[ctx.from.id] = ctx.callbackQuery.message.message_id;
 
   // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
   try {
@@ -2352,6 +2377,7 @@ bot.action("buyvps", async (ctx) => {
 });
 
     
+// ===== MENU BUY PANEL =====
 bot.action("buypanel", async (ctx) => {
   if (!isPanelReady()) {
     return ctx.answerCbQuery(
@@ -2361,31 +2387,44 @@ bot.action("buypanel", async (ctx) => {
   }
 
   await ctx.answerCbQuery().catch(() => {});
+  
+  activeMenus[ctx.from.id] = ctx.callbackQuery.message.message_id;
 
-  // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
-  try {
-      await ctx.deleteMessage(); 
-  } catch (err) {
-      return; 
-  }
-
-  ctx.reply(
-    `<blockquote>🖥️ <b>BUY PANEL</b>\n\n` +
+  const textPanel = `<blockquote>🖥️ <b>BUY PANEL</b>\n\n` +
     `Ketik:\n<code><b>${config.prefix}buypanel username</b></code>\n\n` +
     `Contoh:\n<code><b>${config.prefix}buypanel KaellVirex</b></code>\n\n` +
-    `Lanjutkan dengan mengetik perintah di chat.</blockquote>`,
-    {
-      parse_mode: "html",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }]
-        ]
-      }
+    `Lanjutkan dengan mengetik perintah di chat.</blockquote>`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }]
+    ]
+  };
+
+  try {
+    await ctx.editMessageMedia(
+      { 
+        type: "photo", 
+        media: config.katalogImage, 
+        caption: textPanel, 
+        parse_mode: "HTML" 
+      },
+      { reply_markup: keyboard }
+    );
+  } catch (err) {
+    // 🔥 FIX: JIKA PESAN SEBELUMNYA CUMA TEKS, HAPUS LALU KIRIM FOTO BARU 🔥
+    if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.katalogImage, {
+            caption: textPanel, 
+            parse_mode: "HTML", 
+            reply_markup: keyboard
+        }).catch(() => {});
     }
-  ).catch(() => {});
+  }
 });
 
-
+// ===== MENU BUY ADMIN =====
 bot.action("buyadmin", async (ctx) => {
   if (!isPanelReady()) {
     return ctx.answerCbQuery(
@@ -2395,29 +2434,43 @@ bot.action("buyadmin", async (ctx) => {
   }
 
   await ctx.answerCbQuery().catch(() => {});
+  
+  activeMenus[ctx.from.id] = ctx.callbackQuery.message.message_id;
 
-  // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
-  try {
-      await ctx.deleteMessage(); 
-  } catch (err) {
-      return; 
-  }
-
-  ctx.reply(
-    `<blockquote>👑 <b>BUY ADMIN PANEL</b>\n\n` +
+  const textAdmin = `<blockquote>👑 <b>BUY ADMIN PANEL</b>\n\n` +
     `Ketik:\n<code><b>${config.prefix}buyadmin username</b></code>\n\n` +
     `Contoh:\n<code><b>${config.prefix}buyadmin KaellVirex</b></code>\n\n` +
-    `Lanjutkan dengan mengetik perintah di chat.</blockquote>`,
-    {
-      parse_mode: "html",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }]
-        ]
-      }
+    `Lanjutkan dengan mengetik perintah di chat.</blockquote>`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }]
+    ]
+  };
+
+  try {
+    await ctx.editMessageMedia(
+      { 
+        type: "photo", 
+        media: config.katalogImage, 
+        caption: textAdmin, 
+        parse_mode: "HTML" 
+      },
+      { reply_markup: keyboard }
+    );
+  } catch (err) {
+    // 🔥 FIX: JIKA PESAN SEBELUMNYA CUMA TEKS, HAPUS LALU KIRIM FOTO BARU 🔥
+    if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.katalogImage, {
+            caption: textAdmin, 
+            parse_mode: "HTML", 
+            reply_markup: keyboard
+        }).catch(() => {});
     }
-  ).catch(() => {});
+  }
 });
+
 
 
 bot.action("cancel_order", async (ctx) => {
@@ -2607,7 +2660,8 @@ Pilih kategori produk yang ingin dibeli:</blockquote>
 
 bot.action("buysubdo_menu", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-    try { await ctx.deleteMessage(); } catch (e) { return; } // Anti-spam
+    
+    activeMenus[ctx.from.id] = ctx.callbackQuery.message.message_id;
 
     const hargaSubdo = 5000; // SILAKAN UBAH HARGA DI SINI
 
@@ -2627,12 +2681,33 @@ Ketik perintah di bawah ini pada chat:
 <code>${config.prefix}buysubdo serverku 192.168.1.1</code>
 `.trim();
 
-    ctx.replyWithPhoto(config.katalogImage, {
-        caption: textSubdo,
-        parse_mode: "HTML",
-        reply_markup: { inline_keyboard: [[{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }]] }
-    }).catch(() => {});
+    const keyboard = {
+        inline_keyboard: [[{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }]]
+    };
+
+    try {
+        await ctx.editMessageMedia(
+            { 
+                type: "photo", 
+                media: config.katalogImage, 
+                caption: textSubdo, 
+                parse_mode: "HTML" 
+            },
+            { reply_markup: keyboard }
+        );
+    } catch (err) {
+        // 🔥 FIX: JIKA PESAN SEBELUMNYA CUMA TEKS, HAPUS LALU KIRIM FOTO BARU 🔥
+        if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
+            await ctx.deleteMessage().catch(() => {});
+            await ctx.replyWithPhoto(config.katalogImage, {
+                caption: textSubdo, 
+                parse_mode: "HTML", 
+                reply_markup: keyboard
+            }).catch(() => {});
+        }
+    }
 });
+
 
 // --- KONFIRMASI SUBDOMAIN ---
 bot.action(/^sub_sel\|(.+)\|(.+)\|(.+)/, async (ctx) => {
