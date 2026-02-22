@@ -497,8 +497,9 @@ ${productDetails}
 
     const contactButton = {
       text: "📞 BELANJA PRODUK",
-      url: config.botUsername
+      url: `https://t.me/${config.botUsername}`
     };
+
 
     await ctx.telegram.sendMessage(config.channelId, notificationText, {
       parse_mode: "HTML",
