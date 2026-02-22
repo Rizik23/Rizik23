@@ -61,7 +61,8 @@ function escapeMarkdown(text) {
 }
 
 function escapeHTML(str) {
-  return str.replace(/[&<>"']/g, m => ({
+  if (str === undefined || str === null) return '';
+  return String(str).replace(/[&<>"']/g, m => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -69,6 +70,7 @@ function escapeHTML(str) {
     "'": "&#039;"
   }[m]));
 }
+
 
 // Fungsi untuk generate random fee
 function generateRandomFee() {
@@ -199,40 +201,62 @@ const menuTextUbot = () => `
 const menuTextBot = (ctx) => {
   let db = loadUsers();
   const firstName = ctx.from?.first_name || "-";
-  const lastName = ctx.from?.last_name || "-";
+  const lastName = ctx.from?.last_name || "";
   const userId = ctx.from?.id;
   const { totalUser, totalTransaksi, totalPemasukan } = getBotStats(db);
 
   return `
-<blockquote><b>🚀 AUTO ORDER</b></blockquote>
-ʙᴏᴛ ʟᴀʏᴀɴᴀɴ ᴏᴛᴏᴍᴀᴛɪꜱ ʏᴀɴɢ ʙᴇʀᴛᴜɢᴀꜱ
-ᴍᴇᴍᴘᴇʀᴄᴇᴘᴀᴛ ᴛʀᴀɴꜱᴀᴋꜱɪ ᴅᴇɴɢᴀɴ layanan
+<blockquote><b>🚀 AUTO ORDER SYSTEM</b></blockquote>
+Halo <b>${escapeHTML(firstName)} ${escapeHTML(lastName)}</b> 👋  
+Selamat datang di layanan transaksi otomatis 24/7 nonstop.
 
-<blockquote><b>⚙️SISTEM FULL OTOMATIS</b></blockquote>
-⌥ Auto create panel
-⌥ Auto proses pembayaran
-⌥ Auto kirim data akun
-⌥ Online 24/7 nonstop
-
-<blockquote><b>📊 STATISTIK</b></blockquote>
-🪧 Runtime: ${runtime(process.uptime())}
-👥 Total User: ${totalUser}
-💰 Total Pemasukan: Rp${escapeHTML(totalPemasukan.toLocaleString("id-ID"))}
+━━━━━━━━━━━━━━━━━━━━━━
+<b>⚙️ FITUR OTOMATIS</b>
+• Auto Create Panel
+• Auto Proses Pembayaran
+• Auto Kirim Data Akun
+• Sistem Real-Time & Nonstop
+━━━━━━━━━━━━━━━━━━━━━━
+<b>📊 STATISTIK BOT</b>
+🖥 Runtime        : ${runtime(process.uptime())}
+👥 Total User     : ${totalUser}
 🛒 Total Transaksi: ${totalTransaksi}
+💰 Total Pemasukan: Rp${escapeHTML(totalPemasukan.toLocaleString("id-ID"))}
+━━━━━━━━━━━━━━━━━━━━━━
+
+Gunakan menu di bawah untuk mulai bertransaksi 💎
 `;
 };
 
-const textOrder = (name, price, fee) => `
-<b>───[ INFORMASI PEMBAYARAN ]───</b>
+const textOrder = (name, price, fee) => {
+  const total = price + fee;
 
-📦 Produk: ${escapeHTML(name)}
-💰 Nominal: Rp${toRupiah(price)} (Fee Rp${fee})
-💳 Total Pembayaran: Rp${toRupiah(price + fee)}
-🕒 Expired Qr: 6 Menit
+  return `
+<b>━━━━━━━━━━〔 DETAIL PEMBAYARAN QRIS 〕━━━━━━━━━━</b>
 
-Silakan scan QRIS ini sebelum 6 menit,
-Status pembayaran akan terdeteksi otomatis oleh sistem.
+🧾 <b>Informasi Pesanan</b>
+• Produk          : ${escapeHTML(name)}
+• Harga           : Rp${toRupiah(price)}
+• Biaya Layanan   : Rp${toRupiah(fee)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💳 <b>Total Pembayaran</b> : Rp${toRupiah(total)}
+
+⏳ <b>Batas Waktu Pembayaran</b>
+QRIS aktif selama <b>6 menit</b>.
+Setelah melewati batas waktu, kode QR otomatis tidak berlaku.
+
+📲 <b>Cara Pembayaran</b>
+1. Scan kode QRIS di atas
+2. Pastikan nominal sesuai
+3. Selesaikan pembayaran sebelum waktu habis
+
+🔄 Status pembayaran akan diverifikasi otomatis oleh sistem.
+Tidak perlu mengirim bukti transfer.
+
+Terima kasih telah bertransaksi 🙏
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
+};
 
 // Fungsi untuk membuat text konfirmasi (HTML safe)
 function createConfirmationText(productType, productName, price, fee, details = {}) {
@@ -450,24 +474,24 @@ async function notifyOwner(ctx, orderData, buyerInfo) {
     const buyerUsername = buyerInfo.username ? escapeHTML(buyerInfo.username) : "Tidak ada";
     const buyerName = escapeHTML(buyerInfo.name);
 
-    const notificationText = `💰 <b>ORDER BERHASIL DIPROSES!</b>
-
+    const notificationText = `
+<blockquote>💰 <b>ORDER BERHASIL DIPROSES!</b></blockquote>
+<blockquote>━━━━━━━━━━━━━━━━━━━━━━
 🕒 Waktu: ${waktu}
 📦 Produk: ${escapeHTML(orderData.name)}
 💰 Total: Rp${toRupiah(orderData.amount)}
 👤 Buyer: ${buyerName}
 🆔 User ID: <code>${buyerInfo.id}</code>
 📱 Username: ${buyerInfo.username ? "@" + buyerUsername : "Tidak ada"}
-
-📋 Detail Produk:
+━━━━━━━━━━━━━━━━━━━━━━</blockquote>
+<blockquote>📋 Detail Produk:
 ${productDetails}
-
-━━━━━━━━━━━━━━━
-📊 Total Pembelian User: Rp${toRupiah(buyerInfo.totalSpent)}`.trim();
+━━━━━━━━━━━━━━━</blockquote>
+<blockquote>📊 Total Pembelian User: Rp${toRupiah(buyerInfo.totalSpent)}</blockquote>`.trim();
 
     const contactButton = {
-      text: "📞 Hubungi Buyer",
-      url: buyerInfo.username ? `https://t.me/${buyerInfo.username}` : `tg://user?id=${buyerInfo.id}`
+      text: "📞 BELANJA PRODUK",
+      url: config.botUsername }
     };
 
     await ctx.telegram.sendMessage(config.ownerId, notificationText, {
@@ -3624,60 +3648,104 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
         });
     });
 
-    // ===== KONFIRMASI PEMBAYARAN PANEL =====
+    // ===== OPSI PEMBAYARAN PANEL =====
     bot.action(/confirm_panel_payment\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery();
+        
+        const [ram, username] = ctx.match[1].split("|");
+        const userId = ctx.from.id;
+        
+        const priceKey = ram === "unli" ? "unlimited" : `${ram}`;
+        const basePrice = hargaPanel[priceKey];
+        if (!basePrice) return ctx.reply("Harga panel tidak ditemukan!");
+        
+        const users = loadUsers();
+        const user = users.find(u => u.id === userId);
+        const saldo = user ? (user.balance || 0) : 0;
+
+        return ctx.editMessageText(
+            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: Panel ${ram === "unli" ? "Unlimited" : ram}\n👤 Username: ${username}\n💰 Harga: Rp${basePrice.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+            {
+                parse_mode: "html",
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_panel|${ram}|${username}` }],
+                        [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_panel|${ram}|${username}` }],
+                        [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
+                    ]
+                }
+            }
+        );
+    });
+
+    // ===== BAYAR PANEL VIA QRIS =====
+    bot.action(/pay_qris_panel\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery();
+        await ctx.deleteMessage();
+
+        const [ram, username] = ctx.match[1].split("|");
+        const userId = ctx.from.id;
+        const fee = generateRandomFee();
+        const priceKey = ram === "unli" ? "unlimited" : `${ram}`;
+        const basePrice = hargaPanel[priceKey];
+        if (!basePrice) return ctx.reply("Harga panel tidak ditemukan!");
+
+        const price = fee + basePrice;
+        const name = `Panel ${ram === "unli" ? "Unlimited" : ram}`;
+        const paymentType = config.paymentGateway;
+        const pay = await createPayment(paymentType, price, config);
+
+        orders[userId] = { type: "panel", username, ram, name, amount: price, fee, orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+        const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(name, basePrice, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+        orders[userId].qrMessageId = qrMsg.message_id;
+        startCheck(userId, ctx);
+    });
+
+    // ===== BAYAR PANEL VIA SALDO =====
+    bot.action(/pay_saldo_panel\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery();
         await ctx.deleteMessage();
 
         const [ram, username] = ctx.match[1].split("|");
         const userId = ctx.from.id;
 
-        const fee = generateRandomFee();
-
         const priceKey = ram === "unli" ? "unlimited" : `${ram}`;
-        const basePrice = hargaPanel[priceKey];
+        const price = hargaPanel[priceKey];
+        if (!price) return ctx.reply("Harga panel tidak ditemukan!");
 
-        if (!basePrice) {
-            return ctx.reply("Harga panel tidak ditemukan!");
+        const users = loadUsers();
+        const userIndex = users.findIndex(u => u.id === userId);
+        
+        if (users[userIndex].balance < price) {
+            return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" });
         }
 
-        const price = fee + basePrice;
+        users[userIndex].balance -= price;
+        users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
+        
         const name = `Panel ${ram === "unli" ? "Unlimited" : ram}`;
+        users[userIndex].history = users[userIndex].history || [];
+        users[userIndex].history.push({ product: name, amount: price, type: "panel", details: `Username: ${username}, RAM: ${ram === "unli" ? "Unlimited" : ram + "GB"}`, timestamp: new Date().toISOString() });
+        saveUsers(users);
 
-        const paymentType = config.paymentGateway;
-        const pay = await createPayment(paymentType, price, config);
+        await ctx.reply(`⏳ Sedang membuat Panel Pterodactyl... Mohon tunggu.`);
 
-        orders[userId] = {
-            type: "panel",
-            username,
-            ram,
-            name,
-            amount: price,
-            fee,
-            orderId: pay.orderId || null,
-            paymentType,
-            chatId: ctx.chat.id,
-            expireAt: Date.now() + 6 * 60 * 1000
-        };
+        const buyerInfo = { id: userId, name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''), username: ctx.from.username, totalSpent: users[userIndex].total_spent };
+        await notifyOwner(ctx, { type: "panel", name, amount: price, username, ram }, buyerInfo);
 
-        const photo =
-            paymentType === "pakasir"
-                ? { source: pay.qris }
-                : pay.qris;
+        const ramVal = ram === "unli" ? "Unlimited" : `${ram}GB`;
+        const fixUsername = username + randomNumber(3);
 
-        const qrMsg = await ctx.replyWithPhoto(photo, {
-            caption: textOrder(name, basePrice, fee),
-            parse_mode: "html",
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]
-                ]
-            }
-        });
+        let res = await createPanel(fixUsername, ramVal.toLowerCase());
+        if (!res.success) return ctx.reply(`❌ Error! Terjadi kesalahan saat membuat panel.\nSilahkan hubungi admin @${config.ownerUsername}`);
 
-        orders[userId].qrMessageId = qrMsg.message_id;
-        startCheck(userId, ctx);
+        res = res.data;
+        const teksPanel = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n👤 Username: <code>${escapeHTML(res.username)}</code>\n🔑 Password: <code>${escapeHTML(res.password)}</code>\n💾 RAM: ${ramVal}\n🆔 Server ID: ${res.serverId}\n📛 Server Name: ${escapeHTML(res.serverName)}\n⏳ Expired: 1 Bulan\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>📌 Cara Login:</b></blockquote>\n1. Klik tombol Login Panel di bawah\n2. Masukkan username & password\n3. Server siap dipakai!`;
+
+        await ctx.reply(teksPanel, { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "🔗 Login Panel", url: res.panelUrl }]] } });
     });
+
 
 bot.action(/script\|(.+)/, async (ctx) => {
     await ctx.answerCbQuery();
@@ -3829,52 +3897,93 @@ bot.action("back_to_script", async (ctx) => {
     });
 });
 
-    // ===== KONFIRMASI PEMBAYARAN ADMIN =====
+    // ===== OPSI PEMBAYARAN ADMIN =====
     bot.action(/confirm_admin\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery();
+        
+        const user = ctx.match[1];
+        const userId = ctx.from.id;
+        const basePrice = hargaAdminPanel;
+        
+        const users = loadUsers();
+        const dbUser = users.find(u => u.id === userId);
+        const saldo = dbUser ? (dbUser.balance || 0) : 0;
+
+        return ctx.editMessageText(
+            `🛒 <b>Pilih Metode Pembayaran</b>\n\n👑 Produk: Admin Panel\n👤 Username: ${user}\n💰 Harga: Rp${basePrice.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+            {
+                parse_mode: "html",
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_admin|${user}` }],
+                        [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_admin|${user}` }],
+                        [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
+                    ]
+                }
+            }
+        );
+    });
+
+    // ===== BAYAR ADMIN VIA QRIS =====
+    bot.action(/pay_qris_admin\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery();
         await ctx.deleteMessage();
 
         const user = ctx.match[1];
         const userId = ctx.from.id;
-
         const fee = generateRandomFee();
-        const price = fee + hargaAdminPanel
+        const price = fee + hargaAdminPanel;
         const name = "Admin Panel";
-
         const paymentType = config.paymentGateway;
 
         const pay = await createPayment(paymentType, price, config);
 
-        orders[userId] = {
-            username: user,
-            type: "admin",
-            name,
-            amount: price,
-            fee,
-            orderId: pay.orderId || null,
-            paymentType: paymentType,
-            chatId: ctx.chat.id,
-            expireAt: Date.now() + 6 * 60 * 1000
-        };
-
-        const photo =
-            paymentType === "pakasir"
-                ? { source: pay.qris }
-                : pay.qris;
-
-        const qrMsg = await ctx.replyWithPhoto(photo, {
-            caption: textOrder(name, hargaAdminPanel, fee),
-            parse_mode: "html",
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]
-                ]
-            }
-        });
-
+        orders[userId] = { username: user, type: "admin", name, amount: price, fee, orderId: pay.orderId || null, paymentType: paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+        const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(name, hargaAdminPanel, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
         orders[userId].qrMessageId = qrMsg.message_id;
         startCheck(userId, ctx);
     });
+
+    // ===== BAYAR ADMIN VIA SALDO =====
+    bot.action(/pay_saldo_admin\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery();
+        await ctx.deleteMessage();
+
+        const username = ctx.match[1];
+        const userId = ctx.from.id;
+        const price = hargaAdminPanel;
+
+        const users = loadUsers();
+        const userIndex = users.findIndex(u => u.id === userId);
+        
+        if (users[userIndex].balance < price) {
+            return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" });
+        }
+
+        users[userIndex].balance -= price;
+        users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
+        
+        const name = "Admin Panel";
+        users[userIndex].history = users[userIndex].history || [];
+        users[userIndex].history.push({ product: name, amount: price, type: "admin", details: `Username: ${username}`, timestamp: new Date().toISOString() });
+        saveUsers(users);
+
+        await ctx.reply(`⏳ Sedang membuat Admin Panel... Mohon tunggu.`);
+
+        const buyerInfo = { id: userId, name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''), username: ctx.from.username, totalSpent: users[userIndex].total_spent };
+        await notifyOwner(ctx, { type: "admin", name, amount: price, username }, buyerInfo);
+
+        const fixUsername = username + randomNumber(3);
+        try {
+            const res = await createAdmin(fixUsername);
+            const teksAdmin = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n🆔 User ID: ${res.id}\n👤 Username: <code>${escapeHTML(res.username)}</code>\n🔑 Password: <code>${escapeHTML(res.password)}</code>\n⏳ Expired: 1 Bulan\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>📌 Cara Login:</b></blockquote>\n1. Klik tombol Login Panel di bawah\n2. Masukkan username & password\n3. Admin panel siap digunakan!`;
+            await ctx.reply(teksAdmin, { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "🔗 Login Panel", url: res.panel }]] } });
+        } catch (e) {
+            return ctx.reply(`❌ Error! Terjadi kesalahan saat membuat admin panel.\nSilahkan hubungi admin @${config.ownerUsername}`);
+        }
+    });
+
 
     function startCheck(userId, ctx) {
         const intv = setInterval(async () => {
