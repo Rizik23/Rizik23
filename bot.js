@@ -3752,7 +3752,7 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
     });
 
 
-bot.action(/script\|(.+)/, async (ctx) => {
+bot.action(/^script\|(.+)/, async (ctx) => {
     await ctx.answerCbQuery();
     const name = ctx.match[1];
     const scripts = loadScripts();
