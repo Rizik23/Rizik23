@@ -5,6 +5,7 @@ module.exports = {
   botUsername: "ElikaMd_bot",
   menuImage: "https://tmpfiles.org/dl/25539099/1771702158731.png",
   katalogImage: "https://tmpfiles.org/dl/25538833/file_000000003d2472089efb8382ea472f0c.png",
+  referralImage: "https://tmpfiles.org/dl/25574179/file_000000004fe07206b5eeabf4aac9a109.png",
   prefix: "/",
   ownerName: "kaell",
   ownerUsername: "Myzxa",

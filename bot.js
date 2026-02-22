@@ -10,6 +10,8 @@ const scriptDB = path.join(__dirname, "/db/scripts.json");
 const userDB = path.join(__dirname, "/db/users.json");
 const stockDB = path.join(__dirname, "/db/stocks.json");
 const voucherDB = path.join(__dirname, "/db/vouchers.json");
+const promptDir = path.join(__dirname, "prompts");
+const promptDB = path.join(__dirname, "/db/prompts.json");
 const hargaPanel = require("./price/panel.js");
 const hargaAdminPanel = require("./price/adminpanel.js");
 const vpsPackages = require("./price/vps.js");
@@ -24,6 +26,8 @@ if (!fs.existsSync(userDB)) fs.writeFileSync(userDB, "[]");
 if (!fs.existsSync(stockDB)) fs.writeFileSync(stockDB, "{}");
 if (!fs.existsSync(doDB)) fs.writeFileSync(doDB, "{}");
 if (!fs.existsSync(voucherDB)) fs.writeFileSync(voucherDB, "{}");
+if (!fs.existsSync(promptDir)) fs.mkdirSync(promptDir);
+if (!fs.existsSync(promptDB)) fs.writeFileSync(promptDB, "[]");
 
 // Load database
 const loadScripts = () => JSON.parse(fs.readFileSync(scriptDB));
@@ -36,6 +40,8 @@ const loadDO = () => JSON.parse(fs.readFileSync(doDB));
 const saveDO = (d) => fs.writeFileSync(doDB, JSON.stringify(d, null, 2));
 const loadVouchers = () => JSON.parse(fs.readFileSync(voucherDB));
 const saveVouchers = (d) => fs.writeFileSync(voucherDB, JSON.stringify(d, null, 2));
+const loadPrompts = () => JSON.parse(fs.readFileSync(promptDB));
+const savePrompts = (d) => fs.writeFileSync(promptDB, JSON.stringify(d, null, 2));
 
 
 // ===================== FUNGSI UTILITAS =====================
@@ -213,6 +219,14 @@ const menuTextBot = (ctx) => {
 
   // Cari user di database untuk mengecek saldo
   const user = db.find(u => u.id === userId);
+  const fromId = ctx.from.id;
+  
+  // Ambil Data User
+  const users = loadUsers();
+  const myUser = users.find(u => u.id === fromId);
+
+  // Siapkan Data Statistik & Link
+  const myRefs = myUser ? (myUser.referrals || 0) : 0;
   
   // Ambil saldo, jika user baru/belum ada balance, jadikan 0
   const saldo = user ? (user.balance || 0) : 0;
@@ -232,6 +246,7 @@ Selamat datang di layanan transaksi otomatis 24/7 Jam Nonstop.
 <b>📧 Username:</b> ${escapeHTML(userUsername)}
 <b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>
 <b>💳 Saldo:</b> Rp${saldo.toLocaleString("id-ID")}
+<b>👥 Refferal: </b>${myRefs} Orang
 ━━━━━━━━━━━━━━━━━━━━━━
 <blockquote><b>📊 STATISTIK BOT</b></blockquote>
 <b>🖥 Waktu Run:</b> ${runtime(process.uptime())}
@@ -239,7 +254,6 @@ Selamat datang di layanan transaksi otomatis 24/7 Jam Nonstop.
 <b>🛒 Total Transaksi:</b> ${totalTransaksi}
 <b>💰 Total Pemasukan:</b> Rp${escapeHTML(totalPemasukan.toLocaleString("id-ID"))}
 ━━━━━━━━━━━━━━━━━━━━━━
-<i>Gunakan menu di bawah untuk mulai bertransaksi 💎</i>
 `;
 };
 
@@ -466,6 +480,9 @@ async function notifyOwner(ctx, orderData, buyerInfo) {
         break;
       case "script":
         productDetails = `📦 Script: ${escapeHTML(orderData.name)}`;
+        break;
+      case "prompt":
+        productDetails = `📄 Prompt: ${escapeHTML(orderData.name)}\n📝 Deskripsi: ${escapeHTML(orderData.description || "-")}`;
         break;
       case "app":
         productDetails = `📱 Kategori: ${escapeHTML(orderData.category)}
@@ -1119,12 +1136,45 @@ bot.action("deladmin-back", async (ctx) => {
 
         switch (command) {
             // ===== MENU / START =====
+            // ===== MENU / START =====
             case "menu":
             case "start": {
-	                return ctx.replyWithPhoto(config.menuImage, {
-	                    caption: menuTextBot(ctx),
-	                    // menuTextBot() menghasilkan HTML (<b>...</b>)
-	                    parse_mode: "HTML",
+                // ---> LOGIKA DEEP LINK REDEEM VOUCHER <---
+                if (args[0] && args[0].startsWith("redeem_")) {
+                    const kode = args[0].replace("redeem_", "").toUpperCase();
+                    const vouchers = loadVouchers();
+                    
+                    if (!vouchers[kode]) return ctx.reply("❌ Kode voucher tidak ditemukan atau salah.");
+                    
+                    const voucher = vouchers[kode];
+                    if (voucher.kuota <= 0) return ctx.reply("❌ Maaf, kuota voucher ini sudah habis.");
+                    if (voucher.claimedBy.includes(fromId)) return ctx.reply("❌ Kamu sudah pernah klaim voucher ini!");
+                    
+                    const users = loadUsers();
+                    const userIndex = users.findIndex(u => u.id === fromId);
+                    if (userIndex === -1) return ctx.reply("❌ Error: User tidak ditemukan."); 
+                    
+                    // Tambah saldo & kurangi kuota
+                    users[userIndex].balance = (users[userIndex].balance || 0) + voucher.nominal;
+                    voucher.kuota -= 1;
+                    voucher.claimedBy.push(fromId);
+                    
+                    saveUsers(users);
+                    saveVouchers(vouchers);
+                    
+                    return ctx.reply(
+                        `🎉 <b>SELAMAT!</b>\n\n` +
+                        `Kamu berhasil menukarkan kode voucher <code>${kode}</code> dari link!\n` +
+                        `💰 Saldo bertambah Rp${voucher.nominal.toLocaleString('id-ID')}\n` +
+                        `💳 Saldo sekarang: Rp${users[userIndex].balance.toLocaleString('id-ID')}`, 
+                        { parse_mode: "HTML" }
+                    );
+                }
+                
+                // Tampilkan Menu Utama Default
+                return ctx.replyWithPhoto(config.menuImage, {
+                    caption: menuTextBot(ctx),
+                    parse_mode: "HTML",
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -1133,6 +1183,9 @@ bot.action("deladmin-back", async (ctx) => {
                             [
                                 { text: "👤 Cek Profil", callback_data: "profile" },
                                 { text: "📮 Cek History", callback_data: "history" }
+                            ], 
+                            [
+                                { text: "🤝 CODE REFERRAL", callback_data: "menu_referral" }
                             ], 
                             [
                                 { text: "💳 Deposit Saldo", callback_data: "deposit_menu" },
@@ -1160,8 +1213,8 @@ bot.action("deladmin-back", async (ctx) => {
                     }
                 });
             }
-// ===== FITUR VOUCHER & REFFERAL =====
 
+// ===== FITUR VOUCHER & REFFERAL =====
 case "addvoucher": {
     if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
     if (args.length < 3) return ctx.reply(`Format: ${config.prefix}addvoucher [kode] [nominal] [kuota]\nContoh: ${config.prefix}addvoucher PROMO10K 10000 50`);
@@ -1383,6 +1436,53 @@ case "history": {
 
     return ctx.reply(historyText, { parse_mode: "HTML" });
 }
+
+// ===== ADD PROMPT =====
+case "addprompt": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    if (!ctx.message.reply_to_message?.document)
+        return ctx.reply(`Reply file TXT dengan:\n${escapeHTML(config.prefix)}addprompt nama|deskripsi|harga`, { parse_mode: "HTML" });
+
+    const doc = ctx.message.reply_to_message.document;
+    if (!doc.file_name.endsWith(".txt")) return ctx.reply("❌ Harus file .txt bro!");
+
+    if (!text.includes("|")) return ctx.reply(`Format: ${escapeHTML(config.prefix)}addprompt nama|deskripsi|harga`, { parse_mode: "HTML" });
+    const [name, desk, price] = text.split("|").map(v => v.trim());
+    if (!name || isNaN(price) || !desk) return ctx.reply("❌ Data tidak valid.");
+
+    const prompts = loadPrompts();
+    if (prompts.find(s => s.name.toLowerCase() === name.toLowerCase()))
+        return ctx.reply("❌ Prompt dengan nama ini sudah ada.");
+
+    const link = await ctx.telegram.getFileLink(doc.file_id);
+    const res = await axios.get(link.href, { responseType: "arraybuffer" });
+    const savePath = path.join(promptDir, doc.file_name);
+    fs.writeFileSync(savePath, res.data);
+
+    prompts.push({ name, desk, price: Number(price), file: `prompts/${doc.file_name}`, added_date: new Date().toISOString() });
+    savePrompts(prompts);
+
+    await ctx.reply(`✅ Prompt ${escapeHTML(name)} berhasil ditambahkan.`, { parse_mode: "HTML" });
+    return broadcastNewProduct(ctx, "PROMPT AI", name, null, price, "/buyprompt");
+}
+
+// ===== GET/DEL PROMPT =====
+case "delprompt":
+case "getprompt": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner only.");
+    const allPrompts = loadPrompts();
+    if (!allPrompts.length) return ctx.reply("📭 Belum ada prompt.");
+
+    const buttons = allPrompts.map((s, i) => ([
+        { text: `📄 ${escapeHTML(s.name)} - Rp${s.price}`, callback_data: `getprompt_detail|${i}` }
+    ]));
+
+    return ctx.reply(`<b>📄 DAFTAR PROMPT AI</b>\n\nPilih Prompt untuk melihat detail:`, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons }
+    });
+}
+
 
 // ===== USERLIST (OWNER ONLY) =====
 case "userlist": {
@@ -1832,6 +1932,174 @@ case "delstockdo": {
         }
     });
 
+// ===== MENU BUY PROMPT =====
+bot.action("buyprompt", async (ctx) => {
+    const promptsList = loadPrompts();
+    if (!promptsList.length) return ctx.answerCbQuery("Stok prompt kosong", { show_alert: true });
+    await ctx.answerCbQuery().catch(() => {});
+
+    const promptButtons = promptsList.map(s => [
+        { text: `📄 ${escapeHTML(s.name)} - Rp${s.price}`, callback_data: `prompt|${s.name}` }
+    ]);
+    promptButtons.push([{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }]);
+
+    ctx.reply("<b>Pilih Nama Prompt:</b>", { parse_mode: "HTML", reply_markup: { inline_keyboard: promptButtons } }).catch(() => {});
+    ctx.deleteMessage().catch(() => {});
+});
+
+bot.action(/^prompt\|(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const name = ctx.match[1];
+    const prompts = loadPrompts();
+    const sc = prompts.find(s => s.name === name);
+    
+    if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
+
+    const text = `<blockquote><b>📝 Konfirmasi Pemesanan</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n💰 Harga: Rp${Number(sc.price).toLocaleString("id-ID")}\n━━━━━━━━━━━━━━━━━━━━━━\n<blockquote><b>📝 Deskripsi:</b></blockquote>\n${escapeHTML(sc.desk || "-")}\n━━━━━━━━━━━━━━━━━━━━━━\n⚠️ Yakin ingin melanjutkan pembayaran?`.trim();
+
+    await ctx.editMessageText(text, {
+        parse_mode: "HTML",
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: "✅ Konfirmasi", callback_data: `confirm_prompt|${sc.name}` }, { text: "❌ Batalkan", callback_data: "back_to_prompt" }]
+            ]
+        }
+    });
+});
+
+bot.action("back_to_prompt", async (ctx) => {
+    await ctx.answerCbQuery();
+    const promptsList = loadPrompts();
+    if (!promptsList.length) return ctx.editMessageText("📭 Stok prompt sedang kosong.");
+
+    const promptButtons = promptsList.map(s => ([{ text: `📄 ${escapeHTML(s.name)} - Rp${Number(s.price).toLocaleString("id-ID")}`, callback_data: `prompt|${s.name}` }]));
+    promptButtons.push([{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }]);
+
+    await ctx.editMessageText("Pilih Prompt yang ingin dibeli:", { parse_mode: "HTML", reply_markup: { inline_keyboard: promptButtons } });
+});
+
+bot.action(/confirm_prompt\|(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const name = ctx.match[1];
+    const userId = ctx.from.id;
+    const prompts = loadPrompts();
+    const sc = prompts.find(s => s.name === name);
+    if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
+
+    const users = loadUsers();
+    const user = users.find(u => u.id === userId);
+    const saldo = user ? (user.balance || 0) : 0;
+
+    return ctx.editMessageText(
+        `🛒 <b>Pilih Metode Pembayaran</b>\n\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n💰 Harga: Rp${sc.price.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+        { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_prompt|${sc.name}` }], [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_prompt|${sc.name}` }], [{ text: "❌ Batalkan", callback_data: "back_to_prompt" }]] } }
+    );
+});
+
+bot.action(/pay_saldo_prompt\|(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const name = ctx.match[1];
+    const userId = ctx.from.id;
+    const prompts = loadPrompts();
+    const sc = prompts.find(s => s.name === name);
+    if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
+
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (users[userIndex].balance < sc.price) return ctx.reply("❌ Saldo tidak cukup!");
+
+    users[userIndex].balance -= sc.price;
+    users[userIndex].total_spent = (users[userIndex].total_spent || 0) + sc.price;
+    users[userIndex].history = users[userIndex].history || [];
+    users[userIndex].history.push({ product: `Prompt: ${sc.name}`, amount: sc.price, type: "prompt", details: sc.desk || "-", timestamp: new Date().toISOString() });
+    saveUsers(users);
+
+    const buyerInfo = { id: userId, name: ctx.from.first_name, username: ctx.from.username, totalSpent: users[userIndex].total_spent };
+    await notifyOwner(ctx, { type: "prompt", name: sc.name, amount: sc.price, description: sc.desk }, buyerInfo);
+
+    await ctx.reply(`<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n💰 Harga: Rp${sc.price.toLocaleString('id-ID')}\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>File Prompt sedang dikirim...</i>`, { parse_mode: "html" });
+    
+    try {
+        await ctx.telegram.sendDocument(ctx.chat.id, { source: sc.file }, { caption: `📄 Prompt: ${escapeHTML(sc.name)}`, parse_mode: "html" });
+    } catch (err) {
+        await ctx.reply("❌ Gagal mengirim file prompt. Silakan hubungi admin.");
+    }
+});
+
+bot.action(/pay_qris_prompt\|(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const name = ctx.match[1];
+    const userId = ctx.from.id;
+    const prompts = loadPrompts();
+    const sc = prompts.find(s => s.name === name);
+    if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
+
+    const fee = generateRandomFee();
+    const price = sc.price + fee;
+    const paymentType = config.paymentGateway;
+    const pay = await createPayment(paymentType, price, config);
+
+    orders[userId] = { type: "prompt", name: sc.name, amount: price, fee, file: sc.file, orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+    const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+    const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(sc.name, sc.price, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+    orders[userId].qrMessageId = qrMsg.message_id;
+    startCheck(userId, ctx);
+});
+
+bot.action(/getprompt_detail\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
+    const index = Number(ctx.match[1]);
+    const prompts = loadPrompts();
+    const s = prompts[index];
+    if (!s) return ctx.editMessageText("❌ Prompt tidak ditemukan.");
+
+    const detailText = `📋 <b>DETAIL PROMPT</b>\n\n📄 <b>Nama:</b> ${escapeHTML(s.name)}\n💰 <b>Harga:</b> Rp${toRupiah(s.price)}\n📁 <b>File:</b> ${escapeHTML(s.file || "-")}\n📅 <b>Ditambahkan:</b> ${new Date(s.added_date).toLocaleDateString('id-ID')}\n\n📝 <b>Deskripsi:</b>\n${escapeHTML(s.desk || "-")}`;
+
+    return ctx.editMessageText(detailText, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: [
+                [{ text: "📤 Download Prompt", callback_data: `download_prompt|${index}` }, { text: "🗑️ Hapus Prompt", callback_data: `del_prompt|${s.name}` }],
+                [{ text: "↩️ Back ke List", callback_data: "back_to_prompt_list" }]
+            ]}
+    });
+});
+
+bot.action(/download_prompt\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
+    const prompts = loadPrompts();
+    const s = prompts[Number(ctx.match[1])];
+    if (!s || !fs.existsSync(path.resolve(s.file))) return ctx.reply("❌ File prompt tidak ditemukan.");
+    return ctx.replyWithDocument({ source: path.resolve(s.file) }, { caption: `📄 Prompt: ${escapeHTML(s.name)}`, parse_mode: "HTML" });
+});
+
+bot.action("back_to_prompt_list", async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
+    const allPrompts = loadPrompts();
+    if (!allPrompts.length) return ctx.editMessageText("📭 Belum ada prompt.");
+    const buttons = allPrompts.map((s, i) => ([{ text: `📄 ${escapeHTML(s.name)} - Rp${s.price}`, callback_data: `getprompt_detail|${i}` }]));
+    return ctx.editMessageText("<b>📄 DAFTAR PROMPT</b>\n\nPilih Prompt untuk melihat detail:", { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+});
+
+bot.action(/del_prompt\|(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!isOwner(ctx)) return ctx.answerCbQuery('❌ Owner Only!');
+    const name = ctx.match[1];
+    let prompts = loadPrompts();
+    const sc = prompts.find(s => s.name === name);
+    if (!sc) return ctx.editMessageText("❌ Tidak ditemukan.");
+
+    if (fs.existsSync(path.join(__dirname, sc.file))) fs.unlinkSync(path.join(__dirname, sc.file));
+    savePrompts(prompts.filter(s => s.name !== name));
+
+    return ctx.editMessageText(`✅ Prompt <b>${escapeHTML(name)}</b> berhasil dihapus.`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Kembali ke List", callback_data: "back_to_prompt_list" }]] } });
+});
+
+
 bot.action("buyscript", async (ctx) => {
     const scriptsList = loadScripts();
 
@@ -2246,12 +2514,14 @@ bot.action("back_to_main_menu", async (ctx) => {
       reply_markup: {
         inline_keyboard: [
           [ 
-            { text: "🛍️ Katalog Produk", callback_data: "katalog" }, 
-            { text: "🤝 REFERRAL SYSTEM", callback_data: "menu_referral" }
+            { text: "🛍️ Katalog Produk", callback_data: "katalog" }
           ],
           [
             { text: "👤 Cek Profil", callback_data: "profile" },
             { text: "📮 Cek History", callback_data: "history" }
+          ],
+          [
+            { text: "🤝 CODE REFERRAL", callback_data: "menu_referral" }
           ],
           [
             { text: "💳 Deposit Saldo", callback_data: "deposit_menu" },
@@ -2282,6 +2552,9 @@ bot.action("katalog", async (ctx) => {
       [
         { text: "📱 ☇ Apk Prem", callback_data: "buyapp" },
         { text: "🗂 ☇ Script", callback_data: "buyscript" }
+      ],
+      [
+        { text: "📄 ☇ Prompt AI", callback_data: "buyprompt" }
       ],
       [
         { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
@@ -2357,8 +2630,7 @@ Setiap teman yang mendaftar melalui link kamu, kamu akan mendapatkan bonus saldo
 💰 Total pendapatan: <b>Rp${myEarnings.toLocaleString('id-ID')}</b>
 `.trim();
 
-  // URL Gambar Referral (Silakan ganti dengan URL gambar lu atau gunakan yang sudah gue buatkan)
-  const imageUrl = "https://tmpfiles.org/dl/25574179/file_000000004fe07206b5eeabf4aac9a109.png"; // Bisa juga pakai config.referralImage kalau mau disimpen di config.js
+  const imageUrl =  config.referralImage;
 
   try {
     await ctx.editMessageMedia(
@@ -4870,6 +5142,18 @@ Terimakasih sudah membeli produk ♥️`,
                     }
                 }
             }
+            // ===== KIRIM PROMPT =====
+            if (o.type === "prompt") {
+                await ctx.telegram.sendDocument(
+                    o.chatId,
+                    { source: o.file },
+                    {
+                        caption: `📄 Prompt: ${escapeHTML(o.name)}`,
+                        parse_mode: "html"
+                    }
+                );
+            }
+
 
             // ===== BUAT VPS DIGITAL OCEAN SETELAH PEMBAYARAN =====
             if (o.type === "vps") {
