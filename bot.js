@@ -345,7 +345,7 @@ const isOwner = (ctx) => {
     return fromId.toString() == config.ownerId;
 }
 
-// Fungsi untuk menambahkan user ke database
+// Cari kode ini:
 function addUser(userData) {
     const users = loadUsers();
     const existingUser = users.find(u => u.id === userData.id);
@@ -354,12 +354,14 @@ function addUser(userData) {
             ...userData,
             username: userData.username ? escapeHTML(userData.username) : "",
             first_name: userData.first_name ? escapeHTML(userData.first_name) : "",
-            last_name: userData.last_name ? escapeHTML(userData.last_name) : ""
+            last_name: userData.last_name ? escapeHTML(userData.last_name) : "",
+            balance: 0 // <--- TAMBAHKAN BARIS INI
         };
         users.push(userToAdd);
         saveUsers(users);
     }
 }
+
 
 // Fungsi untuk update user history
 function updateUserHistory(userId, orderData, details = {}) {
@@ -984,6 +986,101 @@ bot.action("deladmin-back", async (ctx) => {
                     }
                 });
             }
+
+// ===== FITUR SALDO & DEPOSIT =====
+case "deposit":
+case "topup": {
+    const amountStr = args[0];
+    if (!amountStr) return ctx.reply(`Ketik ${config.prefix}deposit nominal\nContoh: ${config.prefix}deposit 20000`);
+    
+    // Hilangkan karakter non-angka (seperti Rp atau titik)
+    const amount = parseInt(amountStr.replace(/[^0-9]/g, ''));
+    if (isNaN(amount) || amount < 1000) return ctx.reply("❌ Minimal deposit adalah Rp1.000");
+
+    const fee = generateRandomFee();
+    const price = amount + fee;
+    const paymentType = config.paymentGateway;
+    const pay = await createPayment(paymentType, price, config);
+
+    orders[fromId] = {
+        type: "deposit",
+        name: `Deposit Saldo Rp${amount.toLocaleString('id-ID')}`,
+        amount: price,
+        depositAmount: amount, // Jumlah bersih yang masuk ke saldo
+        fee,
+        orderId: pay.orderId || null,
+        paymentType: paymentType,
+        chatId: ctx.chat.id,
+        expireAt: Date.now() + 6 * 60 * 1000
+    };
+
+    const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+    const qrMsg = await ctx.replyWithPhoto(photo, {
+        caption: textOrder(`Deposit Saldo`, amount, fee),
+        parse_mode: "html",
+        reply_markup: {
+            inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]]
+        }
+    });
+
+    orders[fromId].qrMessageId = qrMsg.message_id;
+    startCheck(fromId, ctx);
+    break;
+}
+
+case "ceksaldo": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    const targetId = args[0];
+    if (!targetId) return ctx.reply("Masukkan ID User!");
+    
+    const users = loadUsers();
+    const user = users.find(u => u.id == targetId);
+    if (!user) return ctx.reply("❌ User tidak ditemukan di database.");
+    
+    return ctx.reply(`💰 Saldo User ID <code>${targetId}</code>:\nRp${(user.balance || 0).toLocaleString('id-ID')}`, { parse_mode: "HTML" });
+}
+
+case "addsaldo": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    const targetId = args[0];
+    const amountStr = args[1];
+    
+    if (!targetId || !amountStr) return ctx.reply(`Format salah!\nContoh: ${config.prefix}addsaldo 1402991119 2000`);
+    
+    const amount = parseInt(amountStr.replace(/[^0-9]/g, ''));
+    if (isNaN(amount)) return ctx.reply("Nominal harus berupa angka!");
+
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id == targetId);
+    if (userIndex === -1) return ctx.reply("❌ User tidak ditemukan.");
+
+    users[userIndex].balance = (users[userIndex].balance || 0) + amount;
+    saveUsers(users);
+
+    ctx.telegram.sendMessage(targetId, `🎉 <b>SELAMAT!</b>\nSaldo Anda telah ditambahkan sebesar Rp${amount.toLocaleString('id-ID')} oleh Admin.`, { parse_mode: "HTML" });
+    return ctx.reply(`✅ Berhasil menambahkan Rp${amount.toLocaleString('id-ID')} ke user ${targetId}. Saldo sekarang: Rp${users[userIndex].balance.toLocaleString('id-ID')}`);
+}
+
+case "delsaldo": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    const targetId = args[0];
+    const amountStr = args[1];
+    
+    if (!targetId || !amountStr) return ctx.reply(`Format salah!\nContoh: ${config.prefix}delsaldo 1402991119 2000`);
+    
+    const amount = parseInt(amountStr.replace(/[^0-9]/g, ''));
+    if (isNaN(amount)) return ctx.reply("Nominal harus berupa angka!");
+
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id == targetId);
+    if (userIndex === -1) return ctx.reply("❌ User tidak ditemukan.");
+
+    users[userIndex].balance = Math.max(0, (users[userIndex].balance || 0) - amount);
+    saveUsers(users);
+
+    return ctx.reply(`✅ Berhasil mengurangi Rp${amount.toLocaleString('id-ID')} dari user ${targetId}. Saldo sekarang: Rp${users[userIndex].balance.toLocaleString('id-ID')}`);
+}
+
 
 // ===== PROFILE USER =====
 case "profile": {
@@ -2859,9 +2956,45 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
             }
         });
     });
+    
+        bot.action(/confirm_app_payment\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery();
+        
+        const [category, indexStr] = ctx.match[1].split("|");
+        const index = parseInt(indexStr);
+        const stocks = loadStocks();
+        const items = stocks[category];
+
+        if (!items || !items[index]) return ctx.reply("❌ Item tidak ditemukan!");
+        if (items[index].stock <= 0) return ctx.reply("❌ Stok habis!");
+
+        const item = items[index];
+        const userId = ctx.from.id;
+        const price = item.price; // Harga asli tanpa fee
+        
+        const users = loadUsers();
+        const user = users.find(u => u.id === userId);
+        const saldo = user ? (user.balance || 0) : 0;
+
+        // Berikan opsi pembayaran
+        return ctx.editMessageText(
+            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: ${category.toUpperCase()} - ${item.description}\n💰 Harga: Rp${price.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+            {
+                parse_mode: "html",
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_app|${category}|${index}` }],
+                        [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_app|${category}|${index}` }],
+                        [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
+                    ]
+                }
+            }
+        );
+    });
+
 
     // ===== KONFIRMASI PEMBAYARAN APP =====
-    bot.action(/confirm_app_payment\|(.+)/, async (ctx) => {
+    bot.action(/pay_qris_app\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery();
         await ctx.deleteMessage();
 
@@ -2923,6 +3056,116 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
         orders[userId].qrMessageId = qrMsg.message_id;
         startCheck(userId, ctx);
     });
+    bot.action(/pay_saldo_app\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery();
+        await ctx.deleteMessage();
+
+        const [category, indexStr] = ctx.match[1].split("|");
+        const index = parseInt(indexStr);
+        const stocks = loadStocks();
+        const items = stocks[category];
+        const item = items[index];
+        const price = item.price;
+        const userId = ctx.from.id;
+
+        const users = loadUsers();
+        const userIndex = users.findIndex(u => u.id === userId);
+        
+        // Cek apakah saldo cukup
+        if (users[userIndex].balance < price) {
+            return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit dengan cara ketik:\n<code>/deposit nominal</code>`, { parse_mode: "HTML" });
+        }
+
+        // Cek stok lagi untuk memastikan tidak dibeli orang lain di waktu bersamaan
+        if (item.stock <= 0) return ctx.reply("❌ Maaf, stok baru saja habis!");
+
+        // Potong Saldo & Catat di history
+        users[userIndex].balance -= price;
+        users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
+        
+        const name = `${category.toUpperCase()} - ${item.description}`;
+        const transaction = {
+            product: name,
+            amount: price,
+            type: "app",
+            timestamp: new Date().toISOString()
+        };
+        users[userIndex].history = users[userIndex].history || [];
+        users[userIndex].history.push(transaction);
+        saveUsers(users);
+
+        // Ambil 1 akun dan potong stok
+        const sentAccount = item.accounts.shift();
+        item.stock -= 1;
+
+        if (item.stock <= 0) {
+            stocks[category].splice(index, 1);
+            if (stocks[category].length === 0) {
+                delete stocks[category];
+            }
+        }
+        saveStocks(stocks);
+
+        // --- NOTIFIKASI KE OWNER ---
+        const buyerInfo = {
+            id: userId,
+            name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''),
+            username: ctx.from.username,
+            totalSpent: users[userIndex].total_spent
+        };
+        const orderData = { type: "app", name: name, amount: price, category: category, description: item.description };
+        await notifyOwner(ctx, orderData, buyerInfo);
+
+        // --- PENGIRIMAN FILE KE USER ---
+        const fileName = `${category}_${Date.now()}.txt`;
+        const fileContent = `=== DATA AKUN ${category.toUpperCase()} ===\n\n` +
+            `Produk: ${escapeHTML(name)}\n` +
+            `Keterangan: ${escapeHTML(item.description)}\n` +
+            `Harga: Rp${toRupiah(price)}\n` +
+            `Tanggal: ${new Date().toLocaleString('id-ID')}\n\n` +
+            `=== DATA AKUN ===\n` +
+            `${escapeHTML(sentAccount)}\n\n` +
+            `=== INSTRUKSI ===\n` +
+            `1. Login dengan akun di atas\n` +
+            `2. Nikmati fitur premium\n` +
+            `3. Jangan bagikan akun ke orang lain\n` +
+            `4. Akun ini untuk personal use\n\n` +
+            `=== SUPPORT ===\n` +
+            `Jika ada masalah, hubungi: @${config.ownerUsername}`;
+
+        const tempFilePath = path.join(__dirname, 'temp', fileName);
+        const tempDir = path.join(__dirname, 'temp');
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+        fs.writeFileSync(tempFilePath, fileContent);
+
+        const appText = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>
+
+📱 Produk: ${escapeHTML(name)}
+💰 Harga: Rp${toRupiah(price)}
+💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}
+
+📁 Data akun telah dikirim dalam file .txt
+📝 Silakan download file untuk melihat detail akun
+
+<blockquote><b>📌 Cara Pakai:</b></blockquote>
+1. Login dengan akun yang tersedia
+2. Nikmati fitur premium
+3. Jangan bagikan akun ke orang lain`;
+
+        try {
+            await ctx.telegram.sendMessage(ctx.chat.id, appText, { parse_mode: "html" });
+            await ctx.telegram.sendDocument(ctx.chat.id, { source: tempFilePath, filename: fileName }, {
+                caption: `📁 File Data Akun: ${escapeHTML(name)}`, parse_mode: "html"
+            });
+            setTimeout(() => { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); }, 5000);
+        } catch (error) {
+            console.error("Error sending file:", error);
+            const fallbackText = `<b>✅ Pembelian via Saldo Berhasil!</b>\n\n📱 Produk: ${escapeHTML(name)}\n💰 Harga: Rp${toRupiah(price)}\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>🔑 Data Akun: </b></blockquote>\n<code>${escapeHTML(sentAccount)}</code>\n\n⚠️ Note: Akun ini untuk personal use`;
+            await ctx.telegram.sendMessage(ctx.chat.id, fallbackText, { parse_mode: "html" });
+        }
+    });
+
+
 
 // Handler untuk kembali ke pilihan paket
 bot.action(/back_to_packages/, async (ctx) => {
@@ -3676,6 +3919,48 @@ bot.action("back_to_script", async (ctx) => {
             clearInterval(intv);
             const o = orders[userId];
 
+            // ==========================================
+            // ===== LOGIKA KHUSUS UNTUK DEPOSIT ========
+            // ==========================================
+            if (o.type === "deposit") {
+                const users = loadUsers();
+                const userIndex = users.findIndex(u => u.id === userId);
+                
+                if (userIndex !== -1) {
+                    // Tambahkan saldo
+                    users[userIndex].balance = (users[userIndex].balance || 0) + o.depositAmount;
+                    saveUsers(users);
+                }
+
+                // Kirim Notif ke Owner kalau ada yang deposit
+                const buyerInfo = {
+                    id: userId,
+                    name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''),
+                    username: ctx.from.username,
+                    totalSpent: users[userIndex]?.total_spent || 0
+                };
+                await notifyOwner(ctx, o, buyerInfo);
+
+                // Kirim pesan sukses ke User
+                await ctx.telegram.sendMessage(
+                    o.chatId,
+                    `<blockquote><b>✅ Deposit Berhasil!</b></blockquote>\n\nSaldo sebesar Rp${o.depositAmount.toLocaleString('id-ID')} telah masuk ke akun Anda.\n💰 Saldo Anda sekarang: Rp${users[userIndex].balance.toLocaleString('id-ID')}`,
+                    { parse_mode: "html" }
+                );
+
+                try {
+                    if (o.qrMessageId) {
+                        await ctx.telegram.deleteMessage(o.chatId, o.qrMessageId);
+                    }
+                } catch (e) { }
+
+                delete orders[userId];
+                
+                // PENTING: return di sini agar kode di bawah (pengiriman barang) tidak ikut tereksekusi!
+                return; 
+            }
+            // ==========================================
+
             updateUserHistory(userId, o);
 
             const users = loadUsers();
@@ -3691,7 +3976,7 @@ bot.action("back_to_script", async (ctx) => {
                 username: ctx.from.username,
                 totalSpent: users[userIndex]?.total_spent || 0
             };
-            
+
             await notifyOwner(ctx, o, buyerInfo);
 
             await ctx.telegram.sendMessage(
