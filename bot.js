@@ -1228,7 +1228,7 @@ case "buysubdo": {
     if (!domains.length) return ctx.reply("❌ Sistem error: Konfigurasi API domain belum di-setting oleh Owner.");
 
     const domainButtons = domains.map(dom => ([
-        { text: `🌐 .${dom}`, callback_data: `subdo_select|${host}|${ip}|${dom}` }
+        { text: `🌐 .${dom}`, callback_data: `sub_sel|${host}|${ip}|${dom}` }
     ]));
 
     return ctx.reply(`Pilih Domain Induk untuk <b>${host}</b>:`, {
@@ -1236,6 +1236,7 @@ case "buysubdo": {
         reply_markup: { inline_keyboard: domainButtons }
     });
 }
+
 
 
 // ===== FITUR VOUCHER & REFFERAL =====
@@ -2634,10 +2635,10 @@ Ketik perintah di bawah ini pada chat:
 });
 
 // --- KONFIRMASI SUBDOMAIN ---
-bot.action(/subdo_select\|(.+)\|(.+)\|(.+)/, async (ctx) => {
+bot.action(/^sub_sel\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     const [host, ip, domain] = ctx.match.slice(1);
-    const hargaSubdo = 5000; // Samakan harganya dengan yang di atas
+    const hargaSubdo = 5000; 
     
     const text = `<blockquote><b>📝 Konfirmasi Pemesanan Subdomain</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━\n🌐 Subdomain: <code>${host}.${domain}</code>\n📌 Pointing IP: <code>${ip}</code>\n💰 Harga: Rp${hargaSubdo.toLocaleString("id-ID")}\n━━━━━━━━━━━━━━━━━━━━━━\n⚠️ Yakin ingin melanjutkan pembayaran?`;
 
@@ -2645,14 +2646,14 @@ bot.action(/subdo_select\|(.+)\|(.+)\|(.+)/, async (ctx) => {
         parse_mode: "HTML",
         reply_markup: {
             inline_keyboard: [
-                [{ text: "✅ Konfirmasi", callback_data: `confirm_subdo|${host}|${ip}|${domain}` }],
+                [{ text: "✅ Konfirmasi", callback_data: `sub_conf|${host}|${ip}|${domain}` }],
                 [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
             ]
         }
     }).catch(() => {});
 });
 
-bot.action(/confirm_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
+bot.action(/^sub_conf\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     const [host, ip, domain] = ctx.match.slice(1);
     const userId = ctx.from.id;
@@ -2668,8 +2669,8 @@ bot.action(/confirm_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
             parse_mode: "html",
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_subdo|${host}|${ip}|${domain}` }],
-                    [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_subdo|${host}|${ip}|${domain}` }],
+                    [{ text: `💰 Bayar via Saldo`, callback_data: `sub_ps|${host}|${ip}|${domain}` }],
+                    [{ text: `📷 Bayar via QRIS`, callback_data: `sub_pq|${host}|${ip}|${domain}` }],
                     [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
                 ]
             }
@@ -2678,7 +2679,7 @@ bot.action(/confirm_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
 });
 
 // --- BAYAR VIA SALDO ---
-bot.action(/pay_saldo_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
+bot.action(/^sub_ps\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     try { await ctx.deleteMessage(); } catch (e) { return; }
 
@@ -2691,7 +2692,6 @@ bot.action(/pay_saldo_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     
     if (users[userIndex].balance < hargaSubdo) return ctx.reply("❌ Saldo tidak cukup!");
 
-    // 1. Potong saldo duluan
     users[userIndex].balance -= hargaSubdo;
     users[userIndex].total_spent = (users[userIndex].total_spent || 0) + hargaSubdo;
     users[userIndex].history = users[userIndex].history || [];
@@ -2700,10 +2700,9 @@ bot.action(/pay_saldo_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
 
     await ctx.reply(`⏳ Sedang membuat Subdomain Cloudflare... Mohon tunggu.`);
 
-    // 2. Eksekusi CF API
     const api = config.subdomain[domain];
     const panel = `${host}.${domain}`;
-    const node = `node-${host}.${domain}`; // <--- INI UBAHNYA
+    const node = `node-${host}.${domain}`; 
 
     try {
         const createSub = async (name) => {
@@ -2714,19 +2713,16 @@ bot.action(/pay_saldo_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
             if (!res.data.success) throw new Error("Gagal CF");
         };
 
-        await createSub(panel); // Buat domain utama
-        await createSub(node);  // Buat domain node untuk pterodactyl
+        await createSub(panel); 
+        await createSub(node);  
 
-        // Notif ke channel owner
         const buyerInfo = { id: userId, name: ctx.from.first_name, username: ctx.from.username, totalSpent: users[userIndex].total_spent };
         await notifyOwner(ctx, { type: "subdo", name: panel, amount: hargaSubdo, ip: ip }, buyerInfo);
 
-        // Pesan Sukses
         const textSukses = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n🌐 <b>Domain Panel:</b> <code>${panel}</code>\n🌐 <b>Domain Node:</b> <code>${node}</code>\n📌 <b>Target IP:</b> <code>${ip}</code>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>Subdomain sudah aktif dan terhubung ke IP kamu. (Propagasi DNS max 1-5 menit)</i>`;
         await ctx.reply(textSukses, { parse_mode: "HTML" });
 
     } catch (err) {
-        // Auto-Refund jika API Cloudflare mati
         users[userIndex].balance += hargaSubdo;
         saveUsers(users);
         await ctx.reply("❌ Gagal membuat subdomain (Cloudflare API Error). Saldo telah dikembalikan otomatis.");
@@ -2734,7 +2730,7 @@ bot.action(/pay_saldo_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
 });
 
 // --- BAYAR VIA QRIS ---
-bot.action(/pay_qris_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
+bot.action(/^sub_pq\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     try { await ctx.deleteMessage(); } catch (e) { return; }
 
@@ -2757,6 +2753,7 @@ bot.action(/pay_qris_subdo\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     orders[userId].qrMessageId = qrMsg.message_id;
     startCheck(userId, ctx);
 });
+
 
 
 bot.action("menu_referral", async (ctx) => {
