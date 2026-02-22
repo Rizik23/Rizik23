@@ -1631,7 +1631,7 @@ bot.action("buyscript", async (ctx) => {
     const scriptButtons = scriptsList.map(s => [
         {
             text: `🗂 ${escapeHTML(s.name)} - Rp${s.price}`,
-            callback_data: `confirm_script|${s.name}`
+            callback_data: `script|${s.name}` 
         }
     ]);
 
@@ -1646,6 +1646,7 @@ bot.action("buyscript", async (ctx) => {
 
     ctx.deleteMessage().catch(() => {});
 });
+
 
 bot.action("buyapp", async (ctx) => {
     const stocks = loadStocks();
