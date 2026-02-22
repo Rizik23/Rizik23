@@ -49,9 +49,9 @@ module.exports = {
   egg: "15",
   nestid: "5",
   loc: "1",
-  domain: "",
-  apikey: "",
-  capikey: "", 
+  domain: "https://mygdragon-iz.my.id",
+  apikey: "ptlc_jaownshalqpsnepqsjveywtsuqlsowbneks",
+  capikey: "ptla_iehduegdgwhsudhwjdhwushwujalasnhdh", 
   
   // ===== Setting Api Subdomain ===
   subdomain: {
