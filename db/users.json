@@ -131,66 +131,6 @@
     "canceled_count": 1
   },
   {
-    "id": 8555773493,
-    "username": "mylxnz",
-    "first_name": "1%",
-    "last_name": "",
-    "join_date": "2026-01-05T14:39:55.479Z",
-    "total_spent": 465045,
-    "history": [
-      {
-        "product": "Panel 1gb",
-        "amount": 1113,
-        "type": "panel",
-        "timestamp": "2026-01-07T00:08:10.496Z",
-        "details": "Username: bebal, RAM: 1gbGB"
-      },
-      {
-        "product": "Panel 1gb",
-        "amount": 1104,
-        "type": "panel",
-        "timestamp": "2026-01-07T00:09:52.693Z",
-        "details": "Username: beberapa, RAM: 1gbGB"
-      },
-      {
-        "product": "Panel 1gb",
-        "amount": 1162,
-        "type": "panel",
-        "timestamp": "2026-01-07T00:50:27.753Z",
-        "details": "Username: seadanya, RAM: 1gbGB"
-      },
-      {
-        "product": "Panel 1gb",
-        "amount": 1192,
-        "type": "panel",
-        "timestamp": "2026-01-07T13:32:00.956Z",
-        "details": "Username: yusuf, RAM: 1GB"
-      },
-      {
-        "product": "Install Panel + Wings",
-        "amount": 5156,
-        "type": "installpanel",
-        "timestamp": "2026-01-11T08:37:44.447Z",
-        "details": "-"
-      },
-      {
-        "product": "Subdomain (Panel + Node)",
-        "amount": 4200,
-        "type": "buysubdo",
-        "timestamp": "2026-01-11T16:13:37.100Z",
-        "details": "-"
-      },
-      {
-        "product": "Install Panel + Wings",
-        "amount": 5118,
-        "type": "installpanel",
-        "timestamp": "2026-01-14T02:32:38.816Z",
-        "details": "-"
-      }
-    ],
-    "canceled_count": 6
-  },
-  {
     "id": 8231992530,
     "username": "memekbasahbannir",
     "first_name": "BAHLIL PROMO GUNCANG 11.11",
