@@ -3812,9 +3812,8 @@ ${escapeHTML(sc.desk || "-")}
         const user = users.find(u => u.id === userId);
         const saldo = user ? (user.balance || 0) : 0;
 
-        await ctx.deleteMessage();
-
-        return ctx.reply(
+        // KITA UBAH BAGIAN INI JADI EDIT MESSAGE BIAR MULUS
+        return ctx.editMessageText(
             `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: Script ${escapeHTML(sc.name)}\n💰 Harga: Rp${price.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
             {
                 parse_mode: "html",
@@ -3826,8 +3825,9 @@ ${escapeHTML(sc.desk || "-")}
                     ]
                 }
             }
-        );
+        ).catch(err => console.log("Gagal edit pesan:", err));
     });
+
 
     // ===== BAYAR SCRIPT VIA QRIS =====
     bot.action(/pay_qris_script\|(.+)/, async (ctx) => {
