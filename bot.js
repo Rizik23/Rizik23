@@ -506,6 +506,7 @@ async function notifyOwner(ctx, orderData, buyerInfo) {
         productDetails = `🌐 Subdomain: ${escapeHTML(maskedDomain)}\n📌 Pointing IP: <code>${escapeHTML(maskedIp)}</code>`;
         break;
       }
+
       case "do":
         productDetails = `🌊 Kategori: ${escapeHTML(orderData.category)}
 📝 Deskripsi: ${escapeHTML(orderData.description || "-")}`;
@@ -1978,7 +1979,8 @@ case "buysubdo": {
     });
 }
 
-
+        } // <--- INI KURUNG PENUTUP SWITCH COMMAND
+    }); // <--- INI KURUNG PENUTUP BOT.ON("TEXT") YANG BIKIN ERROR KEMARIN
 
 bot.action("buyprompt", async (ctx) => {
     const promptsList = loadPrompts();
@@ -2000,6 +2002,7 @@ bot.action("buyprompt", async (ctx) => {
 
     ctx.reply("<b>Pilih Nama Prompt:</b>", { parse_mode: "HTML", reply_markup: { inline_keyboard: promptButtons } }).catch(() => {});
 });
+
 
 
 bot.action(/^prompt\|(.+)/, async (ctx) => {
