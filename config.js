@@ -1,15 +1,15 @@
 module.exports = {
 
  // ==== Bot Setting ========
-  botToken: "8542010252:AAGiMXol_TwOmdbWGP52KPXQABas4jZGkf4",
+  botToken: "8542010252:AAFN95S_RMGuQ7L7p84cjFUOAAwAS-nFaZ8",
   botUsername: "ElikaMd_bot",
-  menuImage: "https://files.catbox.moe/kcip9w.png",
-  katalogImage: "https://files.catbox.moe/4536uu.png",
+  menuImage: "http://tmpfiles.org/dl/24259196/1771122571414.jpg",
   prefix: "/",
   ownerName: "kaell",
   ownerUsername: "Myzxa",
   ownerId: "1402991119",
-  channelLink: "https://t.me/MyTee5",
+  channelId: "-1003722756127",
+  channelLink: "https://t.me/Mythe5",
   
   // ===== Userbot Setting =====
   apiId: 32424796, // api_id Telegram
@@ -22,10 +22,10 @@ module.exports = {
 
   // ===== OrderKuota Config =====
   orderkuota: {
-    apikey: "",
-    username: "",
-    token: "",
-    qrisCode: ""
+    apikey: "verlangid",
+    username: "mrwibuss",
+    token: "931165:o5EVQ9YOwpJ4jmLltM0z8scyXURSBbZu",
+    qrisCode: "00020101021126670016COM.NOBUBANK.WWW01189360050300000879140214135152866177810303UMI51440014ID.CO.QRIS.WWW0215ID20232438849050303UMI5204511153033605802ID5908MRWIBUSS6013JAKARTA TIMUR61051311062070703A0163043C15"
   },
 
   // ===== Pakasir Config =====
@@ -49,9 +49,9 @@ module.exports = {
   egg: "15",
   nestid: "5",
   loc: "1",
-  domain: "",
-  apikey: "",
-  capikey: "", 
+  domain: "https://rubika.yazxxpanel.my.id",
+  apikey: "ptlc_kJjXsd8p2DucAJUmSoC4X2lhIgs0MDfcX3G7ROHFLia",
+  capikey: "ptla_KiZZnscwwjG4O68vNVrkGLK2AwEUiEM3yWSIjM6v0XB", 
   
   // ===== Setting Api Subdomain ===
   subdomain: {

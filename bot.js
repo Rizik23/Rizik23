@@ -500,7 +500,7 @@ ${productDetails}
       url: config.botUsername
     };
 
-    await ctx.telegram.sendMessage(config.ownerId, notificationText, {
+    await ctx.telegram.sendMessage(config.channelId, notificationText, {
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
