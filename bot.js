@@ -14,6 +14,7 @@ const hargaAdminPanel = require("./price/adminpanel.js");
 const vpsPackages = require("./price/vps.js");
 const doDB = path.join(__dirname, "/db/digitalocean.json");
 const orders = {};
+const pendingDeposit = {};
 
 // Inisialisasi database
 if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir);
@@ -949,6 +950,92 @@ bot.action("deladmin-back", async (ctx) => {
   );
 });
 
+    // ===== FUNGSI PROSES DEPOSIT =====
+    async function processDeposit(ctx, amount, userId) {
+        const fee = generateRandomFee();
+        const price = amount + fee;
+        const paymentType = config.paymentGateway;
+        const pay = await createPayment(paymentType, price, config);
+
+        orders[userId] = {
+            type: "deposit",
+            name: `Deposit Saldo Rp${amount.toLocaleString('id-ID')}`,
+            amount: price,
+            depositAmount: amount,
+            fee,
+            orderId: pay.orderId || null,
+            paymentType: paymentType,
+            chatId: ctx.chat.id,
+            expireAt: Date.now() + 6 * 60 * 1000
+        };
+
+        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+        const qrMsg = await ctx.replyWithPhoto(photo, {
+            caption: textOrder(`Deposit Saldo`, amount, fee),
+            parse_mode: "html",
+            reply_markup: {
+                inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]]
+            }
+        });
+
+        orders[userId].qrMessageId = qrMsg.message_id;
+        startCheck(userId, ctx);
+    }
+
+    // ===== MENU DEPOSIT (TOMBOL INTERAKTIF) =====
+    bot.action("deposit_menu", async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        
+        const depositButtons = [
+            [
+                { text: "Rp 1.000", callback_data: "deposit_pay|1000" },
+                { text: "Rp 2.000", callback_data: "deposit_pay|2000" },
+                { text: "Rp 5.000", callback_data: "deposit_pay|5000" }
+            ],
+            [
+                { text: "Rp 10.000", callback_data: "deposit_pay|10000" },
+                { text: "Rp 20.000", callback_data: "deposit_pay|20000" },
+                { text: "Rp 50.000", callback_data: "deposit_pay|50000" }
+            ],
+            [
+                { text: "✏️ Custom Deposit", callback_data: "deposit_custom" }
+            ],
+            [
+                { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
+            ]
+        ];
+
+        return ctx.editMessageCaption(
+            `💰 <b>Pilih Nominal Deposit</b>\n\nSilakan pilih nominal deposit yang ingin ditambahkan ke saldo Anda, atau klik <b>Custom Deposit</b> untuk memasukkan angka sendiri.`,
+            {
+                parse_mode: "HTML",
+                reply_markup: { inline_keyboard: depositButtons }
+            }
+        ).catch(() => {});
+    });
+
+    // Handle tombol nominal (1000, 5000, dll)
+    bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        await ctx.deleteMessage().catch(() => {});
+        const amount = parseInt(ctx.match[1]);
+        const userId = ctx.from.id;
+        return processDeposit(ctx, amount, userId);
+    });
+
+    // Handle tombol custom
+    bot.action("deposit_custom", async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        const userId = ctx.from.id;
+        pendingDeposit[userId] = true; // Tandai bahwa user ini sedang mau ngetik nominal
+        
+        return ctx.editMessageCaption(
+            `✏️ <b>Custom Deposit</b>\n\nSilakan balas pesan ini dengan mengetik <b>angka nominal</b> deposit yang Anda inginkan (contoh: <code>15000</code> atau <code>5.000</code>).\n\n<i>Minimal deposit Rp1.000</i>`,
+            { parse_mode: "HTML" }
+        ).catch(() => {});
+    });
+
+
 
     // #### HANDLE STORE BOT MENU ##### //
     bot.on("text", async (ctx) => {
@@ -962,9 +1049,22 @@ bot.action("deladmin-back", async (ctx) => {
         const command = isCmd
             ? body.slice(prefix.length).trim().split(" ")[0].toLowerCase()
             : body.toLowerCase();
+            
         const fromId = ctx.from.id;
         const userName = ctx.from.username || `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`;
 
+        // ===== TANGKAP INPUT CUSTOM DEPOSIT =====
+        if (pendingDeposit[fromId]) {
+            delete pendingDeposit[fromId]; // Hapus status
+            const amount = parseInt(body.replace(/[^0-9]/g, '')); // Ambil angkanya saja
+            
+            if (isNaN(amount) || amount < 1000) {
+                return ctx.reply("❌ Nominal tidak valid. Minimal deposit adalah Rp1.000.\nSilakan klik tombol Custom Deposit kembali dari menu.");
+            }
+            return processDeposit(ctx, amount, fromId);
+        }
+
+        // ===== ADD USER KE DATABASE =====
         fromId ? addUser({
             id: fromId,
             username: userName,
@@ -974,6 +1074,7 @@ bot.action("deladmin-back", async (ctx) => {
             total_spent: 0,
             history: []
         }) : ""
+
 
         switch (command) {
             // ===== MENU / START =====
@@ -991,6 +1092,9 @@ bot.action("deladmin-back", async (ctx) => {
                             [
                                 { text: "👤 Cek Profil", callback_data: "profile" },
                                 { text: "📮 Cek History", callback_data: "history" }
+                            ], 
+                            [
+                                { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }
                             ], 
                             [
                                 { text: "📢 Channel", url: config.channelLink  }, 
@@ -1952,6 +2056,9 @@ bot.action("back_to_main_menu", async (ctx) => {
           [
             { text: "👤 Cek Profil", callback_data: "profile" },
             { text: "📮 Cek History", callback_data: "history" }
+          ],
+          [
+            { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }
           ],
           [
             { text: "📢 Channel", url: config.channelLink },
