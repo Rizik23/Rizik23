@@ -60,7 +60,7 @@ module.exports = {
     // --- Suntik Sosmed Setting ( FayuPedia ) ---
   smm: {
       apiId: '177578', // Ganti dengan API ID lu dari web Fayupedia
-      apiKey: 'yviwzb-3uiu2z-9znevl-n2fsg1-yoaqlp', // Ganti dengan API KEY lu
+      apiKey: 'g3id7q-zzqukj-lpe5cl-9bsbyl-iykryu', // Ganti dengan API KEY lu
       baseUrl: 'https://fayupedia.id/api', 
       profitMargin: 1.3 // Untung lu 30%
   },
