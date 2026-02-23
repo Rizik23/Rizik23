@@ -1421,7 +1421,7 @@ Proses <i>reset</i> saldo (Sapu Jagat) telah selesai dilakukan.
             return ctx.reply("❌ <b>Input tidak valid.</b>\n👇 Balas dengan mengetik <code>oke</code> untuk lanjut, atau <code>batal</code> untuk membatalkan.", { parse_mode: "HTML" });
         }
         
-                // ===== TANGKAP CHAT CUSTOMER SERVICE AI =====
+        // ===== TANGKAP CHAT CUSTOMER SERVICE AI =====
         if (pendingAIChat[fromId]) {
             const waitMsg = await ctx.reply("💬 <i>CS AI sedang mengetik balasan...</i>", { parse_mode: "HTML" });
             
@@ -1453,24 +1453,32 @@ Bot ini menjual Panel Pterodactyl, VPS Digital Ocean, Script, Akses AI, dan Laya
 Pertanyaan dari pelanggan: "${text}"
 Berikan balasan langsung (tidak perlu mengulangi pertanyaan).`;
 
-                // Tembak ke API Gemini
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.geminiApiKey}`;
+                // 🔥 FIX: Pakai model gemini-1.5-flash-latest biar gak 404 🔥
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${config.geminiApiKey}`;
+                
                 const response = await axios.post(apiUrl, {
                     contents: [{ parts: [{ text: systemPrompt }] }]
                 });
 
                 const aiReply = response.data.candidates[0].content.parts[0].text;
                 
-                // Hapus tulisan "CS AI sedang mengetik..." dan ganti dengan balasan AI
                 await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, aiReply, {
-                    parse_mode: "Markdown" // Gemini pakai markdown buat bold/italic
+                    parse_mode: "Markdown"
                 });
+
             } catch (err) {
-                console.log(err.message);
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, "❌ <i>Maaf, sistem AI sedang sibuk atau API Key belum di-setting.</i>", { parse_mode: "HTML" });
+                // 🔥 FIX: Buka kedok error asli dari Google 🔥
+                const pesanError = err.response?.data?.error?.message || err.message;
+                console.log("Error API Gemini:", pesanError);
+                
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, 
+                    `❌ <b>GAGAL KONEK KE AI!</b>\n\n<b>Pesan dari Google:</b>\n<code>${pesanError}</code>\n\n<i>*Pastikan API Key di config.js sudah benar.</i>`, 
+                    { parse_mode: "HTML" }
+                );
             }
-            return; // 🛑 PENTING: Stop di sini biar bot gak baca ini sebagai command error
+            return; 
         }
+
 
 
 
