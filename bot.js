@@ -1867,6 +1867,17 @@ case "backup": {
     break;
 }
 
+case "cekipbot": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    try {
+        const { data } = await axios.get("https://api.ipify.org?format=json");
+        return ctx.reply(`🌐 <b>IP SERVER BOT KAMU:</b>\n<code>${data.ip}</code>\n\nSilakan copy IP di atas dan masukkan ke menu Whitelist API di web Fayupedia.`, {parse_mode: "HTML"});
+    } catch (err) {
+        return ctx.reply("❌ Gagal mengecek IP Server.");
+    }
+}
+
+
 // ===== GET SCRIPT =====
 case "delscript":
 case "getscript": {

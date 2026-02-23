@@ -87,7 +87,8 @@ await client.start({
     bot.launch();
 
     const userCommands = [
-      { command: "start", description: "🐸 Tampilkan Menu Utama Kaell" }
+      { command: "start", description: "Tampilkan Menu Utama Kael 🐸" },
+      { command: "menu", description: "Kaell Imupp 🦄" }
     ];
 
     const ownerCommands = [
