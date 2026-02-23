@@ -1227,13 +1227,19 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
                 params.append('api_key', config.smm.apiKey);
 
                 const res = await axios.post(`${config.smm.baseUrl}/services`, params);
-                const services = res.data.data;
-
-                if (!services || res.data.status === false) {
-                    return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, "❌ Gagal mengambil data dari server pusat.");
+                
+                // 🔥 KODE BUKA KEDOK ERROR 🔥
+                if (res.data.status === false || !res.data.data) {
+                    const pesanPusat = res.data.data || res.data.message || "Akses ditolak";
+                    return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, 
+                        `❌ <b>FAYUPEDIA MENOLAK AKSES!</b>\n\nAlasan dari Pusat:\n<code>${escapeHTML(String(pesanPusat))}</code>\n\n<i>*Pastikan API Key benar dan IP Server sudah di-whitelist!</i>`, 
+                        { parse_mode: "HTML" }
+                    );
                 }
 
+                const services = res.data.data;
                 const filtered = services.filter(s => s.name.toLowerCase().includes(keyword) || s.category.toLowerCase().includes(keyword));
+                
                 if (filtered.length === 0) {
                     return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Tidak ditemukan layanan untuk kata kunci: <b>${escapeHTML(keyword)}</b>`, { parse_mode: "HTML" });
                 }
@@ -1248,14 +1254,16 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
                 buttons.push([{ text: "🔍 Cari Ulang", callback_data: "smm_search" }, { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "smm_menu" }]);
 
                 await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, 
-                    `<blockquote>✅ <b>Ditemukan ${filtered.length} Layanan untuk "${escapeHTML(keyword)}"</b></blockquote>\n\nMenampilkan 10 hasil teratas. Silakan pilih layanan di bawah ini:\n\n<i>*Harga yang tertera adalah harga per 1.000 pesanan (per 1K).</i>`, 
+                    `<blockquote>✅ <b>Ditemukan ${filtered.length} Layanan untuk "${escapeHTML(keyword)}"</b></blockquote>\n\nMenampilkan 10 hasil teratas:\n\n<i>*Harga yang tertera adalah per 1.000 (1K).</i>`, 
                     { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }
                 );
             } catch (err) {
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, "❌ Terjadi kesalahan koneksi ke server pusat API.");
+                // Tampilkan error HTTP kalau website Fayupedia down/404
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Terjadi kesalahan HTTP:\n<code>${err.message}</code>`);
             }
             return;
         }
+
 
         // 2. TANGKAP INPUT TARGET & JUMLAH
         if (pendingSmmOrder[fromId]) {
