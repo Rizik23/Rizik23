@@ -2600,6 +2600,9 @@ bot.action(/pay_saldo_prompt\|(.+)/, async (ctx) => {
 
     const users = loadUsers();
     const userIndex = users.findIndex(u => u.id === userId);
+    
+    users[userIndex].balance = users[userIndex].balance || 0;
+    
     if (users[userIndex].balance < sc.price) return ctx.reply("❌ Saldo tidak cukup!");
 
     users[userIndex].balance -= sc.price;
@@ -3264,6 +3267,9 @@ bot.action("smm_pay_saldo", async (ctx) => {
     
     const users = loadUsers();
     const userIndex = users.findIndex(u => u.id === fromId);
+    
+    users[userIndex].balance = users[userIndex].balance || 0;
+    
     if (users[userIndex].balance < orderInfo.price) return ctx.reply(`❌ Saldo tidak cukup!\nTagihan: Rp${orderInfo.price.toLocaleString('id-ID')}\nSaldo: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}`);
     
     const waitMsg = await ctx.reply("⏳ <i>Memproses pesanan ke server pusat...</i>", {parse_mode: "HTML"});
@@ -3634,6 +3640,8 @@ bot.action(/^sub_ps\|(.+)\|(.+)\|(.+)/, async (ctx) => {
 
     const users = loadUsers();
     const userIndex = users.findIndex(u => u.id === userId);
+    
+    users[userIndex].balance = users[userIndex].balance || 0;
     
     if (users[userIndex].balance < hargaSubdo) return ctx.reply("❌ Saldo tidak cukup!");
 
@@ -4892,6 +4900,8 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
         const users = loadUsers();
         const userIndex = users.findIndex(u => u.id === userId);
         
+        users[userIndex].balance = users[userIndex].balance || 0;
+        
         // Cek apakah saldo cukup
         if (users[userIndex].balance < price) {
             return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit dengan cara ketik:\n<code>/deposit nominal</code>`, { parse_mode: "HTML" });
@@ -5514,6 +5524,8 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
         const users = loadUsers();
         const userIndex = users.findIndex(u => u.id === userId);
         
+        users[userIndex].balance = users[userIndex].balance || 0;
+        
         if (users[userIndex].balance < price) {
             return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" });
         }
@@ -5683,6 +5695,8 @@ ${escapeHTML(sc.desk || "-")}
         const users = loadUsers();
         const userIndex = users.findIndex(u => u.id === userId);
         
+        users[userIndex].balance = users[userIndex].balance || 0;
+        
         if (users[userIndex].balance < price) {
             return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" });
         }
@@ -5815,6 +5829,8 @@ bot.action("back_to_script", async (ctx) => {
 
         const users = loadUsers();
         const userIndex = users.findIndex(u => u.id === userId);
+        
+        users[userIndex].balance = users[userIndex].balance || 0;
         
         if (users[userIndex].balance < price) {
             return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" });
