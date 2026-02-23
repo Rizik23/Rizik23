@@ -1423,13 +1423,22 @@ Proses <i>reset</i> saldo (Sapu Jagat) telah selesai dilakukan.
         
         // ===== TANGKAP BALASAN OWNER KE USER =====
         if (isOwner(ctx) && ctx.message.reply_to_message) {
-            const repMsg = ctx.message.reply_to_message.text || "";
-            // Ekstrak ID user dari pesan yang direply owner
-            const match = repMsg.match(/ID:\s*(\d+)/);
-            
-            if (match) {
-                const targetId = match[1];
-                ctx.telegram.sendMessage(targetId, `👨‍💻 <b>Balasan dari Admin:</b>\n\n${escapeHTML(text)}`, { parse_mode: "HTML" })
+            const repMsg = ctx.message.reply_to_message;
+            let targetId = null;
+
+            // 1. Cek dari memory mapping (jika owner me-reply pesan hasil Forward)
+            if (global.csHistory && global.csHistory[repMsg.message_id]) {
+                targetId = global.csHistory[repMsg.message_id];
+            } 
+            // 2. Cek dari text fallback (jika owner me-reply pesan info ID)
+            else if (repMsg.text) {
+                const match = repMsg.text.match(/ID:\s*(\d+)/);
+                if (match) targetId = match[1];
+            }
+
+            if (targetId) {
+                // 🔥 FIX: Pakai 'body' bukan 'text' biar kata pertama gak kepotong / kosong! 🔥
+                ctx.telegram.sendMessage(targetId, `👨‍💻 <b>Balasan dari Admin:</b>\n\n${escapeHTML(body)}`, { parse_mode: "HTML" })
                     .then(() => ctx.reply("✅ Balasan berhasil dikirim ke user."))
                     .catch(() => ctx.reply("❌ Gagal mengirim balasan. User mungkin telah memblokir bot."));
                 return; // Stop di sini biar gak kebaca sbg command lain
@@ -1438,18 +1447,24 @@ Proses <i>reset</i> saldo (Sapu Jagat) telah selesai dilakukan.
 
         // ===== TANGKAP CHAT DARI USER KE CS (OWNER) =====
         if (pendingCsChat[fromId]) {
-            // Format pesan yang bakal dikirim ke Owner
-            const msgToOwner = `📩 <b>PESAN DARI PENGGUNA</b>\n\n👤 Nama: ${escapeHTML(ctx.from.first_name)}\n🆔 ID: <code>${fromId}</code>\n\n💬 <b>Pesan:</b>\n${escapeHTML(text)}\n\n<i>*Balas (Reply) pesan ini untuk membalas langsung ke user.</i>`;
+            global.csHistory = global.csHistory || {}; // Bikin memori penampung
             
-            ctx.telegram.sendMessage(config.ownerId, msgToOwner, { parse_mode: "HTML" })
-                .then(() => {
-                    ctx.reply("✅ <i>Pesan berhasil dikirim ke Admin. Mohon tunggu balasannya...</i>", { parse_mode: "HTML" });
-                })
-                .catch(() => {
-                    ctx.reply("❌ <i>Gagal mengirim pesan ke Admin.</i>", { parse_mode: "HTML" });
-                });
+            try {
+                // 1. Teruskan (Forward) pesan asli dari user biar owner bisa klik profilnya
+                const fwdMsg = await ctx.telegram.forwardMessage(config.ownerId, ctx.chat.id, ctx.message.message_id);
+                global.csHistory[fwdMsg.message_id] = fromId; // Simpan ID user ke memori bot
+
+                // 2. Kirim pesan info tambahan (buat jaga-jaga kalau user setting privasinya di-hide)
+                const infoMsg = await ctx.telegram.sendMessage(config.ownerId, `☝️ <b>Tiket Bantuan (CS)</b>\n👤 Dari: ${escapeHTML(ctx.from.first_name)}\n🆔 ID: <code>${fromId}</code>\n\n<i>*Silakan Reply (Balas) pesan yang diteruskan di atas, atau balas pesan ini untuk menjawab user.</i>`, { parse_mode: "HTML" });
+                global.csHistory[infoMsg.message_id] = fromId;
+
+                ctx.reply("✅ <i>Pesan berhasil dikirim ke Admin. Mohon tunggu balasannya...</i>", { parse_mode: "HTML" });
+            } catch (err) {
+                ctx.reply("❌ <i>Gagal mengirim pesan ke Admin.</i>", { parse_mode: "HTML" });
+            }
             return; // Stop di sini
         }
+
 
 
 
