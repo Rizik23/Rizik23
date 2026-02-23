@@ -3460,7 +3460,7 @@ Subdomain berfungsi untuk mengubah IP VPS kamu menjadi nama domain (contoh: <cod
 Ketik perintah di bawah ini pada chat:
 <code>${config.prefix}buysubdo namasubdomain ip_vps</code>
 
-<blockquote> <b>Contoh:</b></blockquote
+<blockquote> <b>Contoh:</b></blockquote>
 <code>${config.prefix}buysubdo serverku 192.168.1.1</code>
 
 <blockquote>📜 <b>POLICY & NOTES </b></blockquote>
