@@ -3392,10 +3392,10 @@ bot.action("sosmed_admin", async (ctx) => {
          { text: "📸 Instagram", url: config.sosmed.ig }, 
          { text: "💬 WhatsApp", url: config.sosmed.wa } 
       ],
-      [  
-      ],
+      [
          { text: "🌟 Testimoni", url: config.sosmed.testi } 
-      [  
+      ],
+      [
          { text: "✈️ Telegram", url: config.sosmed.tele },
          { text: "🎵 TikTok", url: config.sosmed.tiktok } 
       ],
@@ -3436,6 +3436,7 @@ Mari berteman lebih dekat! Ikuti semua akun sosial media resmi kami untuk mendap
     }
   }
 });
+
 
 
 
