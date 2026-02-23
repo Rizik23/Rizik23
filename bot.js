@@ -20,6 +20,7 @@ const doDB = path.join(__dirname, "/db/digitalocean.json");
 // prosses all produk
 const orders = {};
 const pendingDeposit = {};
+const pendingAIChat = {};
 const activeMenus = {};
 const pendingSmmSearch = {}; 
 const smmTempData = {};
@@ -1419,6 +1420,58 @@ Proses <i>reset</i> saldo (Sapu Jagat) telah selesai dilakukan.
             // Kalau balasannya bukan oke/batal
             return ctx.reply("❌ <b>Input tidak valid.</b>\n👇 Balas dengan mengetik <code>oke</code> untuk lanjut, atau <code>batal</code> untuk membatalkan.", { parse_mode: "HTML" });
         }
+        
+                // ===== TANGKAP CHAT CUSTOMER SERVICE AI =====
+        if (pendingAIChat[fromId]) {
+            const waitMsg = await ctx.reply("💬 <i>CS AI sedang mengetik balasan...</i>", { parse_mode: "HTML" });
+            
+            try {
+                // Tarik data spesifik si User biar AI-nya kenal
+                const users = loadUsers();
+                const myUser = users.find(u => u.id === fromId) || {};
+                const saldoUser = myUser.balance || 0;
+                const namaUser = myUser.first_name || "Pelanggan";
+                const historyStr = (myUser.history && myUser.history.length > 0) 
+                    ? myUser.history.slice(-3).map(h => `${h.product} (Rp${h.amount})`).join(", ") 
+                    : "Belum pernah belanja";
+
+                // Suapin data ke sistem Gemini
+                const systemPrompt = `
+Kamu adalah Customer Service otomatis dari bot Telegram "Auto Order Kaell".
+Gunakan bahasa Indonesia yang santai, ramah, dan gaul (seperti pakai sapaan Halo, Kak).
+JANGAN berikan kode program apapun. Tugasmu hanya membantu keluhan pelanggan.
+
+DATA PELANGGAN YANG SEDANG BERTANYA:
+- Nama: ${namaUser}
+- ID Telegram: ${fromId}
+- Sisa Saldo: Rp${saldoUser}
+- 3 Transaksi Terakhir: ${historyStr}
+
+INFO BOT:
+Bot ini menjual Panel Pterodactyl, VPS Digital Ocean, Script, Akses AI, dan Layanan SMM (Suntik Sosmed). Metode pembayaran mendukung Saldo Bot dan QRIS. Jika ada kendala error sistem, suruh mereka ketik /help atau hubungi owner.
+
+Pertanyaan dari pelanggan: "${text}"
+Berikan balasan langsung (tidak perlu mengulangi pertanyaan).`;
+
+                // Tembak ke API Gemini
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.geminiApiKey}`;
+                const response = await axios.post(apiUrl, {
+                    contents: [{ parts: [{ text: systemPrompt }] }]
+                });
+
+                const aiReply = response.data.candidates[0].content.parts[0].text;
+                
+                // Hapus tulisan "CS AI sedang mengetik..." dan ganti dengan balasan AI
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, aiReply, {
+                    parse_mode: "Markdown" // Gemini pakai markdown buat bold/italic
+                });
+            } catch (err) {
+                console.log(err.message);
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, "❌ <i>Maaf, sistem AI sedang sibuk atau API Key belum di-setting.</i>", { parse_mode: "HTML" });
+            }
+            return; // 🛑 PENTING: Stop di sini biar bot gak baca ini sebagai command error
+        }
+
 
 
         switch (command) {
@@ -1483,6 +1536,9 @@ case "start": {
                 [
                     { text: "👤 Informasi", callback_data: "informasi_admin" },
                     { text: "⭐ Developer ", callback_data: "sosmed_admin" }
+                ],
+                [
+                   { text: "🎧 CS Otomatis (AI)", callback_data: "cs_ai_start" }
                 ]
             ]
         }
@@ -3271,6 +3327,9 @@ bot.action("back_to_main_menu", async (ctx) => {
       [ 
          { text: "👤 Informasi", callback_data: "informasi_admin" },
          { text: "⭐ Developer ", callback_data: "sosmed_admin" }
+      ],
+      [
+         { text: "🎧 CS Otomatis (AI)", callback_data: "cs_ai_start" }
       ]
     ]
   };
@@ -3631,6 +3690,41 @@ bot.action(/^sub_pq\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     orders[userId].qrMessageId = qrMsg.message_id;
     startCheck(userId, ctx);
 });
+
+
+    // ===== MASUK MODE CS AI =====
+    bot.action("cs_ai_start", async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        const fromId = ctx.from.id;
+        pendingAIChat[fromId] = true; // Kunci status user
+        
+        // Hapus menu utama biar rapi
+        try { await ctx.deleteMessage(); } catch (e) {}
+
+        return ctx.reply(
+            `🤖 <b>HALO! AKU ASISTEN AI AUTO ORDER KAELL.</b>\n\nSilakan ketik keluhan, pertanyaan, atau kendala kamu di bawah ini. (Bisa nanya soal saldo, cara order, atau history kamu).\n\n👇 <i>Ketik pesanmu di bawah...</i>`, 
+            {
+                parse_mode: "HTML",
+                reply_markup: {
+                    inline_keyboard: [[{ text: "🛑 Akhiri Chat CS (Kembali ke Bot)", callback_data: "cs_ai_stop" }]]
+                }
+            }
+        );
+    });
+
+    // ===== KELUAR MODE CS AI =====
+    bot.action("cs_ai_stop", async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        const fromId = ctx.from.id;
+        delete pendingAIChat[fromId]; // Buka kunci status
+        
+        try { await ctx.deleteMessage(); } catch (e) {}
+
+        return ctx.reply(
+            `✅ <b>Sesi Chat dengan AI telah diakhiri.</b>\n\nKamu sudah kembali ke mode bot normal. Ketik /menu untuk melihat layanan kami.`, 
+            { parse_mode: "HTML" }
+        );
+    });
 
 
 

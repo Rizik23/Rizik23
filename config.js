@@ -17,6 +17,8 @@ module.exports = {
   helpMenuImage: "https://tmpfiles.org/dl/25691547/1771835255396.png", //* help faq bantuan
   pinkInfoImage: "https://tmpfiles.org/dl/25691685/1771834760932.png", // * gambar ping
   
+  geminiApiKey: "AIzaSy_KODE_RAHASIA_GEMINI_LU_DI_SINI",
+  
   // ===== Userbot Setting dapetin di web telegram org=====
   // * bisa di isi atau juga bisa di kosongin di skip
   apiId: 32424796, // api_id Telegram
