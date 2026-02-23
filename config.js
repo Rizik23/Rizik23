@@ -2,18 +2,19 @@ module.exports = {
 
  // ==== Bot Setting ========
   botToken: "8542010252:AAGiMXol_TwOmdbWGP52KPXQABas4jZGkf4",
-  botUsername: "ElikaMd_bot",
+  botUsername: "ElikaMd_bot", // * username bot tanpa @
   menuImage: "https://tmpfiles.org/dl/25539099/1771702158731.png",
   katalogImage: "https://tmpfiles.org/dl/25538833/file_000000003d2472089efb8382ea472f0c.png",
   referralImage: "https://tmpfiles.org/dl/25574179/file_000000004fe07206b5eeabf4aac9a109.png",
-  prefix: "/",
-  ownerName: "kaell",
-  ownerUsername: "Myzxa",
-  ownerId: "1402991119",
-  channelId: "-1003722756127",
-  channelLink: "https://t.me/MyThe5",
+  prefix: "/", // * jangan di ganti
+  ownerName: "kaell", // * nama ini nama telegram, tapi bebas
+  ownerUsername: "Myzxa", // * username tanpa memakai @
+  ownerId: "1402991119", // * ownerid pertama
+  channelId: "-1003722756127", // * notifikasi pembelian ke channel memakai id
+  channelLink: "https://t.me/MyThe5", // * untun channel di button
   
-  // ===== Userbot Setting =====
+  // ===== Userbot Setting dapetin di web telegram org=====
+  // * bisa di isi atau juga bisa di kosongin di skip
   apiId: 32424796, // api_id Telegram
   apiHash: "8013761f4631b998c60bfe92d373ee4e",
   phoneNumber: "6285213354966", 
@@ -45,15 +46,24 @@ module.exports = {
   },
   
   // Apikey Digitalocean
-  apiDigitalOcean: "", 
+  apiDigitalOcean: "", // * kalau api di isi, otomatis button vps, do, aktip dan sebalik nya kalau tidak di isi, maka otomatis ter ditect restock sedang kosong.
   
   // ===== Panel Config =====
+  // * bagian domain, apikey, capikey, kalau di isi otomatis akan tersedia stock nya, tapi kalau tidak di isi maka restock akan tidak tersedia
   egg: "15",
   nestid: "5",
   loc: "1",
-  domain: "",
-  apikey: "",
-  capikey: "", 
+  domain: "https://root-panel.my.id", // isi kalau ada, bisa di kosongin juga
+  apikey: "ptlc_iyu12koqwIajodHaieoqpHdgTgquOapsjaoJaisjoKAK2KSOSJ", // ini juga sama bisa di isi bisa di biarkan
+  capikey: "ptla_iyu12koqwIajodHaieoqpHdgTgquOapsjaoJaisjoKAK2KSOSJ", // ini juga sama bisa di isi bisa di biarkan
+  
+    // --- Suntik Sosmed Setting ( FayuPedia ) ---
+  smm: {
+      apiId: '177578', // Ganti dengan API ID lu dari web Fayupedia
+      apiKey: 'yviwzb-3uiu2z-9znevl-n2fsg1-yoaqlp', // Ganti dengan API KEY lu
+      baseUrl: 'https://fayupedia.id/api', 
+      profitMargin: 1.3 // Untung lu 30%
+  },
   
   // ===== Setting Api Subdomain ===
   subdomain: {
@@ -70,5 +80,4 @@ module.exports = {
       "apitoken": "SbRAPRzC34ccmf4cJs-0qZ939yHe3Ko6CpolxqW4"
     }
   }
-  
 };

@@ -20,6 +20,13 @@ const doDB = path.join(__dirname, "/db/digitalocean.json");
 const orders = {};
 const pendingDeposit = {};
 const activeMenus = {};
+const pendingSmmSearch = {}; 
+const smmTempData = {};
+const pendingSmmOrder = {}; 
+const smmTempOrder = {};
+const pendingSmmStatus = {};
+const pendingSmmRefill = {};
+
 
 // Inisialisasi database
 if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir);
@@ -534,6 +541,9 @@ async function notifyOwner(ctx, orderData, buyerInfo) {
         break;
       case "script":
         productDetails = `📦 Script: ${escapeHTML(orderData.name)}`;
+        break;
+      case "smm":
+        productDetails = `📦 Layanan: ${escapeHTML(orderData.name)}\n🔗 Target: <code>${escapeHTML(orderData.target || orderData.qty)}</code>\n📈 Qty: ${orderData.qty || orderData.quantity}\n🧾 Order ID: ${orderData.orderId || "-"}`;
         break;
       case "prompt":
         productDetails = `📄 Prompt: ${escapeHTML(orderData.name)}\n📝 Deskripsi: ${escapeHTML(orderData.description || "-")}`;
@@ -1200,6 +1210,142 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
                 saveUsers(users);
             }
         }
+        
+        // ==========================================
+        // ===== FULL LOGIKA TEXT INPUT SMM =========
+        // ==========================================
+
+        // 1. TANGKAP PENCARIAN LAYANAN
+        if (pendingSmmSearch[fromId]) {
+            delete pendingSmmSearch[fromId];
+            const keyword = body.toLowerCase();
+            const waitMsg = await ctx.reply("⏳ <i>Sedang mencari layanan di server pusat...</i>", { parse_mode: "HTML" });
+
+            try {
+                const params = new URLSearchParams();
+                params.append('api_id', config.smm.apiId);
+                params.append('api_key', config.smm.apiKey);
+
+                const res = await axios.post(`${config.smm.baseUrl}/services`, params);
+                const services = res.data.data;
+
+                if (!services || res.data.status === false) {
+                    return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, "❌ Gagal mengambil data dari server pusat.");
+                }
+
+                const filtered = services.filter(s => s.name.toLowerCase().includes(keyword) || s.category.toLowerCase().includes(keyword));
+                if (filtered.length === 0) {
+                    return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Tidak ditemukan layanan untuk kata kunci: <b>${escapeHTML(keyword)}</b>`, { parse_mode: "HTML" });
+                }
+
+                const topResults = filtered.slice(0, 10);
+                smmTempData[fromId] = topResults;
+
+                const buttons = topResults.map((s, index) => {
+                    const hargaMarkup = Math.ceil(s.price * config.smm.profitMargin);
+                    return [{ text: `${s.name.substring(0, 40)}... | Rp${hargaMarkup.toLocaleString('id-ID')}`, callback_data: `smm_select|${index}` }];
+                });
+                buttons.push([{ text: "🔍 Cari Ulang", callback_data: "smm_search" }, { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "smm_menu" }]);
+
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, 
+                    `<blockquote>✅ <b>Ditemukan ${filtered.length} Layanan untuk "${escapeHTML(keyword)}"</b></blockquote>\n\nMenampilkan 10 hasil teratas. Silakan pilih layanan di bawah ini:\n\n<i>*Harga yang tertera adalah harga per 1.000 pesanan (per 1K).</i>`, 
+                    { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }
+                );
+            } catch (err) {
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, "❌ Terjadi kesalahan koneksi ke server pusat API.");
+            }
+            return;
+        }
+
+        // 2. TANGKAP INPUT TARGET & JUMLAH
+        if (pendingSmmOrder[fromId]) {
+            const orderState = pendingSmmOrder[fromId];
+            
+            if (orderState.step === "target") {
+                orderState.target = text;
+                orderState.step = "quantity";
+                return ctx.reply(`✅ Target disimpan: <code>${escapeHTML(text)}</code>\n\n👇 <b>Sekarang balas pesan ini dengan memasukkan JUMLAH (Quantity):</b>\n<i>(Min: ${orderState.service.min}, Max: ${orderState.service.max})</i>`, { parse_mode: "HTML" });
+            }
+            
+            if (orderState.step === "quantity") {
+                const quantity = parseInt(text.replace(/[^0-9]/g, ''));
+                if (isNaN(quantity) || quantity < orderState.service.min || quantity > orderState.service.max) {
+                    return ctx.reply(`❌ Jumlah tidak valid! Masukkan angka antara ${orderState.service.min} sampai ${orderState.service.max}.`);
+                }
+                
+                delete pendingSmmOrder[fromId];
+                const hargaAsli = (orderState.service.price / 1000) * quantity;
+                const hargaJual = Math.ceil(hargaAsli * config.smm.profitMargin);
+                
+                smmTempOrder[fromId] = {
+                    serviceId: orderState.service.id,
+                    serviceName: orderState.service.name,
+                    target: orderState.target,
+                    quantity: quantity,
+                    price: hargaJual
+                };
+                
+                const confirmText = `<blockquote>🛒 <b>KONFIRMASI ORDER SMM</b></blockquote>\n\n📦 <b>Layanan:</b> ${escapeHTML(orderState.service.name)}\n🔗 <b>Target:</b> ${escapeHTML(orderState.target)}\n📈 <b>Jumlah:</b> ${quantity.toLocaleString('id-ID')}\n💰 <b>Total Tagihan:</b> Rp${hargaJual.toLocaleString('id-ID')}\n\nPilih metode pembayaran di bawah ini:`;
+                return ctx.reply(confirmText, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "💰 Bayar via Saldo", callback_data: `smm_pay_saldo` }], [{ text: "📷 Bayar via QRIS", callback_data: `smm_pay_qris` }], [{ text: "❌ Batal", callback_data: "smm_menu" }]] } });
+            }
+            return;
+        }
+
+        // 3. TANGKAP INPUT CEK STATUS
+        if (pendingSmmStatus[fromId]) {
+            delete pendingSmmStatus[fromId];
+            const orderId = text.replace(/[^0-9]/g, '');
+            if (!orderId) return ctx.reply("❌ Order ID tidak valid! Harus berupa angka.");
+
+            const waitMsg = await ctx.reply("⏳ <i>Mengecek status pesanan...</i>", {parse_mode: "HTML"});
+            try {
+                const params = new URLSearchParams();
+                params.append('api_id', config.smm.apiId);
+                params.append('api_key', config.smm.apiKey);
+                params.append('id', orderId); // Parameter untuk Fayupedia
+
+                const res = await axios.post(`${config.smm.baseUrl}/status`, params);
+                if (!res.data || res.data.status === false) throw new Error(res.data.data || "Pesanan tidak ditemukan.");
+
+                const data = res.data.data;
+                let statusText = data.status === "Pending" ? "⏳ Pending" :
+                                 data.status === "Processing" ? "🔄 Processing" :
+                                 data.status === "Success" ? "✅ Success" :
+                                 data.status === "Completed" ? "✅ Completed" :
+                                 data.status === "Partial" ? "⚠️ Partial" :
+                                 data.status === "Canceled" ? "❌ Canceled" : data.status;
+
+                const msg = `<blockquote>📦 <b>STATUS PESANAN SMM</b></blockquote>\n\n🧾 <b>Order ID:</b> <code>${orderId}</code>\n📊 <b>Status:</b> ${statusText}\n📈 <b>Start Count:</b> ${data.start_count || 0}\n📉 <b>Remains:</b> ${data.remains || 0}\n\n<i>*Jika status Canceled/Partial, segera lapor ke admin untuk pengembalian dana (refund).</i>`;
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, msg, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
+            } catch (err) {
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengecek status: ${err.message}`);
+            }
+            return;
+        }
+
+        // 4. TANGKAP INPUT REFILL
+        if (pendingSmmRefill[fromId]) {
+            delete pendingSmmRefill[fromId];
+            const orderId = text.replace(/[^0-9]/g, '');
+            if (!orderId) return ctx.reply("❌ Order ID tidak valid!");
+
+            const waitMsg = await ctx.reply("⏳ <i>Mengirim permintaan refill ke pusat...</i>", {parse_mode: "HTML"});
+            try {
+                const params = new URLSearchParams();
+                params.append('api_id', config.smm.apiId);
+                params.append('api_key', config.smm.apiKey);
+                params.append('id', orderId);
+
+                const res = await axios.post(`${config.smm.baseUrl}/refill`, params);
+                if (!res.data || res.data.status === false) throw new Error(res.data.data || "Pesanan belum memenuhi syarat refill.");
+
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `<blockquote>🔄 <b>PERMINTAAN REFILL SUKSES</b></blockquote>\n\n🧾 <b>Order ID:</b> <code>${orderId}</code>\n✅ Permintaan refill telah diteruskan ke server pusat.`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
+            } catch (err) {
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal request refill:\n<code>${err.message}</code>`);
+            }
+            return;
+        }
+
 
         switch (command) {
             // ===== MENU / START =====
@@ -2531,8 +2677,6 @@ bot.action("buyadmin", async (ctx) => {
   }
 });
 
-
-
 bot.action("cancel_order", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     try { await ctx.deleteMessage(); } catch (err) { return; } // Anti Spam
@@ -2644,6 +2788,140 @@ Tingkatkan terus transaksi Anda dan jadilah Top Pengguna di bot kami!
     });
 });
 
+// ==========================================
+// ===== FULL LOGIKA TOMBOL ACTION SMM ======
+// ==========================================
+
+bot.action("smm_menu", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    activeMenus[ctx.from.id] = ctx.callbackQuery.message.message_id;
+
+    const textSmm = `<blockquote>📈 <b>SMM PANEL AUTO ORDER</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━━━━\nLayanan suntik Sosmed (Followers, Likes, Views, dll) termurah dan otomatis 24 Jam!\n\nSilakan pilih menu di bawah ini:`;
+    const keyboard = { inline_keyboard: [[{ text: "🔍 Cari & Order Layanan", callback_data: "smm_search" }], [{ text: "📦 Status Pesanan", callback_data: "smm_status" }, { text: "🔄 Refill (Garansi)", callback_data: "smm_refill" }], [{ text: "💰 Cek Saldo Pusat (Owner)", callback_data: "smm_cek_pusat" }], [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }]] };
+
+    try {
+        await ctx.editMessageMedia({ type: "photo", media: config.katalogImage, caption: textSmm, parse_mode: "HTML" }, { reply_markup: keyboard });
+    } catch (err) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.katalogImage, { caption: textSmm, parse_mode: "HTML", reply_markup: keyboard }).catch(() => {});
+    }
+});
+
+bot.action("smm_search", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    pendingSmmSearch[ctx.from.id] = true;
+    return ctx.editMessageCaption(`<blockquote>🔍 <b>PENCARIAN LAYANAN SOSMED</b></blockquote>\n\nSilakan balas pesan ini dengan mengetik <b>nama sosmed atau jenis layanan</b> yang ingin dicari.\n\n<b>Contoh ketik:</b>\n<code>Tiktok</code>\n<code>Telegram</code>\n<code>Instagram Followers</code>`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batal", callback_data: "smm_menu" }]] } }).catch(() => {});
+});
+
+bot.action(/smm_select\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const index = parseInt(ctx.match[1]);
+    const fromId = ctx.from.id;
+    const serviceData = smmTempData[fromId]?.[index];
+    if (!serviceData) return ctx.reply("❌ Sesi habis. Silakan cari ulang.", {reply_markup: {inline_keyboard: [[{text: "🔍 Cari Ulang", callback_data: "smm_search"}]]}});
+
+    pendingSmmOrder[fromId] = { step: "target", service: serviceData };
+    try { await ctx.deleteMessage(); } catch (e) {}
+
+    const text = `<blockquote>📝 <b>FORM ORDER SMM</b></blockquote>\n\n📦 <b>Layanan:</b> ${escapeHTML(serviceData.name)}\n💰 <b>Harga/1K:</b> Rp${Math.ceil(serviceData.price * config.smm.profitMargin).toLocaleString('id-ID')}\n🔻 <b>Min Order:</b> ${serviceData.min}\n🔺 <b>Max Order:</b> ${serviceData.max}\n\n👇 <b>Silakan balas pesan ini dengan memasukkan TARGET (Link / Username):</b>`;
+    return ctx.reply(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batal", callback_data: "smm_menu" }]] } });
+});
+
+bot.action("smm_status", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    pendingSmmStatus[ctx.from.id] = true;
+    try { await ctx.deleteMessage(); } catch (e) {}
+    return ctx.reply("<blockquote>📦 <b>CEK STATUS PESANAN</b></blockquote>\n\n👇 <b>Silakan balas pesan ini dengan memasukkan ID PESANAN (Order ID):</b>", { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batal", callback_data: "smm_menu" }]] } });
+});
+
+bot.action("smm_refill", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    pendingSmmRefill[ctx.from.id] = true;
+    try { await ctx.deleteMessage(); } catch (e) {}
+    return ctx.reply("<blockquote>🔄 <b>REFILL PESANAN (GARANSI)</b></blockquote>\n\n👇 <b>Silakan balas pesan ini dengan memasukkan ID PESANAN (Order ID):</b>", { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batal", callback_data: "smm_menu" }]] } });
+});
+
+bot.action("smm_cek_pusat", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    if (!isOwner(ctx)) return ctx.reply("❌ Fitur khusus Owner!");
+    const waitMsg = await ctx.reply("⏳ <i>Mengecek saldo ke server pusat...</i>", {parse_mode: "HTML"});
+    try {
+        const params = new URLSearchParams();
+        params.append('api_id', config.smm.apiId);
+        params.append('api_key', config.smm.apiKey);
+        const res = await axios.post(`${config.smm.baseUrl}/profile`, params);
+        if (!res.data || res.data.status === false) throw new Error(res.data.data || "Gagal cek saldo");
+        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `<blockquote>💰 <b>SALDO PUSAT (FAYUPEDIA)</b></blockquote>\n\n💳 <b>Sisa Saldo:</b> Rp ${Number(res.data.data.balance).toLocaleString('id-ID')}`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
+    } catch (err) {
+        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengecek saldo pusat: ${err.message}`);
+    }
+});
+
+// BAYAR SALDO SMM
+bot.action("smm_pay_saldo", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    try { await ctx.deleteMessage(); } catch (e) { return; }
+    
+    const fromId = ctx.from.id;
+    const orderInfo = smmTempOrder[fromId];
+    if (!orderInfo) return ctx.reply("❌ Sesi expired.");
+    
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id === fromId);
+    if (users[userIndex].balance < orderInfo.price) return ctx.reply(`❌ Saldo tidak cukup!\nTagihan: Rp${orderInfo.price.toLocaleString('id-ID')}\nSaldo: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}`);
+    
+    const waitMsg = await ctx.reply("⏳ <i>Memproses pesanan ke server pusat...</i>", {parse_mode: "HTML"});
+    try {
+        const params = newSearchParams();
+        params.append('api_id', config.smm.apiId);
+        params.append('api_key', config.smm.apiKey);
+        params.append('service', orderInfo.serviceId);
+        params.append('target', orderInfo.target);
+        params.append('quantity', orderInfo.quantity);
+        
+        const res = await axios.post(`${config.smm.baseUrl}/order`, params);
+        if (!res.data || res.data.status === false) return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal memproses ke server pusat: ${res.data.data || "Server error"}`);
+        
+        const orderIdPusat = res.data.data.id;
+        users[userIndex].balance -= orderInfo.price;
+        users[userIndex].total_spent = (users[userIndex].total_spent || 0) + orderInfo.price;
+        users[userIndex].history = users[userIndex].history || [];
+        users[userIndex].history.push({ product: `SMM: ${orderInfo.serviceName.substring(0,25)}...`, amount: orderInfo.price, type: "smm", details: `Target: ${orderInfo.target} | Qty: ${orderInfo.quantity} | OrderID: ${orderIdPusat}`, timestamp: new Date().toISOString() });
+        saveUsers(users);
+        
+        const buyerInfo = { id: fromId, name: ctx.from.first_name, username: ctx.from.username, totalSpent: users[userIndex].total_spent };
+        await notifyOwner(ctx, { type: "smm", name: orderInfo.serviceName, amount: orderInfo.price, target: orderInfo.target, qty: orderInfo.quantity, orderId: orderIdPusat }, buyerInfo);
+        
+        delete smmTempOrder[fromId];
+        const successText = `<blockquote><b>✅ ORDER SMM BERHASIL!</b></blockquote>\n\n📦 <b>Layanan:</b> ${escapeHTML(orderInfo.serviceName)}\n🔗 <b>Target:</b> ${escapeHTML(orderInfo.target)}\n📈 <b>Jumlah:</b> ${orderInfo.quantity.toLocaleString('id-ID')}\n💰 <b>Harga:</b> Rp${orderInfo.price.toLocaleString('id-ID')}\n🧾 <b>ID Pesanan SMM:</b> <code>${orderIdPusat}</code>\n💳 <b>Sisa Saldo:</b> Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>Pesanan segera diproses. Cek status berkala di menu SMM.</i>`;
+        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, successText, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "↩️ Ke Menu SMM", callback_data: "smm_menu"}]]} });
+    } catch (e) {
+        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, "❌ Terjadi kesalahan koneksi ke API.");
+    }
+});
+
+// BAYAR QRIS SMM
+bot.action("smm_pay_qris", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    try { await ctx.deleteMessage(); } catch (e) { return; }
+    
+    const fromId = ctx.from.id;
+    const orderInfo = smmTempOrder[fromId];
+    if (!orderInfo) return ctx.reply("❌ Sesi expired.");
+    
+    const fee = generateRandomFee();
+    const price = orderInfo.price + fee;
+    const paymentType = config.paymentGateway;
+    const pay = await createPayment(paymentType, price, config);
+    
+    orders[fromId] = { type: "smm", name: orderInfo.serviceName, amount: price, fee: fee, serviceId: orderInfo.serviceId, target: orderInfo.target, quantity: orderInfo.quantity, orderId: pay.orderId || null, paymentType: paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+    
+    const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+    const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(`SMM: ${orderInfo.serviceName.substring(0,30)}`, orderInfo.price, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+    orders[fromId].qrMessageId = qrMsg.message_id;
+    startCheck(fromId, ctx);
+});
+
 
 bot.action("back_to_main_menu", async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
@@ -2696,6 +2974,9 @@ bot.action("katalog", async (ctx) => {
       [
         { text: "📄 ☇ Prompt AI", callback_data: "buyprompt" },
         { text: "🌐 ☇ Subdomain", callback_data: "buysubdo_menu" }
+      ],
+      [
+        { text: "📈 ☇ SMM Panel", callback_data: "smm_menu" }
       ],
       [
         { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
@@ -5454,6 +5735,33 @@ Terimakasih sudah membeli produk ♥️`,
                     }
                 }
             }
+            
+            // ===== EKSEKUSI SMM (QRIS SUCCESS) =====
+            if (o.type === "smm") {
+                try {
+                    const params = new URLSearchParams();
+                    params.append('api_id', config.smm.apiId);
+                    params.append('api_key', config.smm.apiKey);
+                    params.append('service', o.serviceId);
+                    params.append('target', o.target);
+                    params.append('quantity', o.quantity);
+                    
+                    const res = await axios.post(`${config.smm.baseUrl}/order`, params);
+                    
+                    if (!res.data || res.data.status === false) {
+                        await ctx.telegram.sendMessage(o.chatId, `❌ Pembayaran sukses, TAPI Gagal memproses SMM ke pusat: ${res.data.data || "Server error"}. Silakan SS struk ini dan lapor admin untuk refund/proses manual.`);
+                    } else {
+                        const orderIdPusat = res.data.data.id;
+                        const successText = `<blockquote><b>✅ ORDER SMM BERHASIL!</b></blockquote>\n\n📦 <b>Layanan:</b> ${escapeHTML(o.name)}\n🔗 <b>Target:</b> ${escapeHTML(o.target)}\n📈 <b>Jumlah:</b> ${o.quantity.toLocaleString('id-ID')}\n🧾 <b>ID Pesanan SMM:</b> <code>${orderIdPusat}</code>\n\n<i>Pesanan segera diproses oleh sistem.</i>`;
+                        await ctx.telegram.sendMessage(o.chatId, successText, { parse_mode: "HTML" });
+                    }
+                } catch (e) {
+                    await ctx.telegram.sendMessage(o.chatId, `❌ Terjadi kesalahan saat request ke pusat. Hubungi admin.`);
+                }
+            }
+
+
+            
             // ===== KIRIM PROMPT =====
             if (o.type === "prompt") {
                 await ctx.telegram.sendDocument(
