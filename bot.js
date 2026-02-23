@@ -1454,7 +1454,7 @@ Pertanyaan dari pelanggan: "${text}"
 Berikan balasan langsung (tidak perlu mengulangi pertanyaan).`;
 
                 // 🔥 FIX: Pakai model gemini-1.5-flash-latest biar gak 404 🔥
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${config.geminiApiKey}`;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.geminiApiKey}`;
                 
                 const response = await axios.post(apiUrl, {
                     contents: [{ parts: [{ text: systemPrompt }] }]
