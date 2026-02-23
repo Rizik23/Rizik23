@@ -1118,14 +1118,27 @@ bot.action("deladmin-back", async (ctx) => {
             ]
         ];
 
-        return ctx.editMessageCaption(
-            `<blockquote>💰 <b>Pilih Nominal Deposit</b>\n\nSilakan pilih nominal deposit yang ingin ditambahkan ke saldo Anda, atau klik <b>Custom Deposit</b> untuk memasukkan angka sendiri</blockquote>`,
-            {
-                parse_mode: "HTML",
-                reply_markup: { inline_keyboard: depositButtons }
+        const captionText = `<blockquote>💰 <b>Pilih Nominal Deposit</b>\n\nSilakan pilih nominal deposit yang ingin ditambahkan ke saldo Anda, atau klik <b>Custom Deposit</b> untuk memasukkan angka sendiri</blockquote>`;
+
+        try {
+            // Coba edit media kalau tombol diklik dari menu utama (yang ada fotonya)
+            await ctx.editMessageMedia(
+                { type: "photo", media: config.menuImage, caption: captionText, parse_mode: "HTML" },
+                { reply_markup: { inline_keyboard: depositButtons } }
+            );
+        } catch (err) {
+            // Kalau tombol diklik dari /help (teks biasa), hapus teksnya dan kirim gambar baru
+            if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
+                await ctx.deleteMessage().catch(() => {});
+                await ctx.replyWithPhoto(config.menuImage, {
+                    caption: captionText,
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: depositButtons }
+                }).catch(() => {});
             }
-        ).catch(() => {});
+        }
     });
+
 
 
 bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
