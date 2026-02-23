@@ -17,6 +17,7 @@ const hargaAdminPanel = require("./price/adminpanel.js");
 const vpsPackages = require("./price/vps.js");
 const doDB = path.join(__dirname, "/db/digitalocean.json");
 
+// prosses all produk
 const orders = {};
 const pendingDeposit = {};
 const activeMenus = {};
@@ -26,6 +27,8 @@ const pendingSmmOrder = {};
 const smmTempOrder = {};
 const pendingSmmStatus = {};
 const pendingSmmRefill = {};
+const pendingDeleteAllSaldo = {};
+
 
 
 // Inisialisasi database
@@ -1353,6 +1356,49 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
             }
             return;
         }
+        
+                // ===== TANGKAP KONFIRMASI DELETE ALL SALDO =====
+        if (pendingDeleteAllSaldo[fromId]) {
+            const jawaban = body.toLowerCase();
+            
+            if (jawaban === "batal") {
+                delete pendingDeleteAllSaldo[fromId]; // Hapus state
+                return ctx.reply("✅ <b>Tindakan Dibatalkan.</b>\nSaldo semua user aman dan tidak dihapus.", { parse_mode: "HTML" });
+            } 
+            
+            if (jawaban === "oke") {
+                delete pendingDeleteAllSaldo[fromId]; // Hapus state
+                
+                const users = loadUsers();
+                let totalSaldoDihapus = 0;
+                let totalUserDireset = 0;
+
+                // Eksekusi penghapusan saldo
+                for (let i = 0; i < users.length; i++) {
+                    if (users[i].balance > 0) {
+                        totalSaldoDihapus += users[i].balance;
+                        users[i].balance = 0;
+                        totalUserDireset++;
+                    }
+                }
+                saveUsers(users);
+
+                const resetText = `
+<blockquote><b>✅ SEMUA SALDO USER BERHASIL DIHAPUS!</b></blockquote>
+━━━━━━━━━━━━━━━━━━━━━━
+Proses <i>reset</i> saldo (Sapu Jagat) telah selesai dilakukan.
+
+📊 <b>Statistik Reset:</b>
+👥 Total User Direset: <b>${totalUserDireset} Orang</b>
+💰 Total Saldo Dihanguskan: <b>Rp${totalSaldoDihapus.toLocaleString('id-ID')}</b>
+━━━━━━━━━━━━━━━━━━━━━━
+`.trim();
+                return ctx.reply(resetText, { parse_mode: "HTML" });
+            }
+            
+            // Kalau balasannya bukan oke/batal
+            return ctx.reply("❌ <b>Input tidak valid.</b>\n👇 Balas dengan mengetik <code>oke</code> untuk lanjut, atau <code>batal</code> untuk membatalkan.", { parse_mode: "HTML" });
+        }
 
 
         switch (command) {
@@ -2087,6 +2133,177 @@ case "addstockdo": {
     break;
 }
 
+// ===== PANDUAN PENGGUNAAN BOT =====
+case "help":
+case "panduan":
+case "bantuan": {
+    const helpText = `
+<blockquote><b>📚 PANDUAN PENGGUNAAN BOT</b></blockquote>
+Selamat datang di bot Auto Order! Berikut adalah panduan lengkap cara menggunakan fitur-fitur di bot ini:
+
+<blockquote><b>💳 1. CARA DEPOSIT (ISI SALDO)</b></blockquote>
+Kamu bisa mengisi saldo dengan 2 cara:
+• <b>Via Tombol:</b> Ketik <code>/menu</code>, lalu klik tombol <b>💳 Deposit Saldo</b>.
+• <b>Via Command:</b> Ketik <code>${config.prefix}deposit nominal</code> (Contoh: <code>${config.prefix}deposit 20000</code>).
+<i>Sistem akan memunculkan kode QRIS. Silakan scan menggunakan DANA, GoPay, OVO, dll. Saldo akan masuk secara otomatis!</i>
+
+<blockquote><b>🛒 2. CARA BELI PRODUK & PEMBAYARAN</b></blockquote>
+• Ketik <code>/menu</code> dan klik <b>🛍️ Katalog Produk</b> untuk melihat semua layanan.
+• Pilih produk yang kamu inginkan.
+• Saat <i>checkout</i>, kamu bisa memilih bayar menggunakan:
+  1. <b>Saldo Bot</b> (Otomatis potong saldo jika mencukupi).
+  2. <b>QRIS</b> (Bayar langsung lunas via scan kode QR).
+
+<blockquote><b>⚡ 3. CARA BELI PANEL</b></blockquote>
+• <b>Cara 1:</b> Ketik langsung <code>${config.prefix}buypanel usernamekamu</code> (Contoh: <code>${config.prefix}buypanel Budi123</code>). Pastikan username tidak pakai spasi!
+• <b>Cara 2:</b> Masuk ke Katalog -> klik Panel -> lalu balas pesan bot dengan username.
+• Pilih RAM yang diinginkan dan lakukan pembayaran. Detail akun panel akan dikirim otomatis.
+
+<blockquote><b>🤝 4. CARA DAPAT SALDO GRATIS (REFERRAL)</b></blockquote>
+• Ketik <code>${config.prefix}ref</code> atau klik tombol <b>🤝 CODE REFERRAL</b> di menu utama.
+• Copy link spesial milikmu dan bagikan ke teman atau grup.
+• Setiap ada orang yang masuk ke bot lewat link kamu, kamu akan <b>otomatis mendapat saldo gratis</b>!
+
+<blockquote><b>📞 5. BUTUH BANTUAN LAIN?</b></blockquote>
+Jika pesananmu belum masuk, deposit nyangkut, atau ada kendala teknis lainnya, silakan klik tombol Hubungi Admin di bawah.
+`.trim();
+
+    // 🔥 KODE DI UBAH JADI PAKE FOTO (replyWithPhoto) 🔥
+    return ctx.replyWithPhoto(config.helpMenuImage, {
+        caption: helpText,
+        parse_mode: "HTML",
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: "🛍️ Buka Katalog", callback_data: "katalog" },
+                    { text: "💳 Isi Saldo", callback_data: "deposit_menu" }
+                ],
+                [
+                    { text: "📞 Hubungi Admin", url: `https://t.me/${config.ownerUsername}` }
+                ]
+            ]
+        }
+    });
+}
+
+// ===== CEK PING & STATUS SYSTEM =====
+case "ping": {
+    const nou = require("node-os-utils");
+    const speed = require("performance-now");
+    const start = speed();
+
+    const cpu = nou.cpu;
+    const drive = nou.drive;
+    const mem = nou.mem;
+
+    // Kirim pesan loading karena fetch data CPU butuh waktu
+    const waitMsg = await ctx.reply("⏳ <i>Mengambil data sistem server...</i>", { parse_mode: "HTML" });
+
+    try {
+        const [osName, driveInfo, memInfo, cpuUsage] = await Promise.all([
+            nou.os.oos().catch(() => "Unknown"),
+            drive.info().catch(() => ({ usedGb: "N/A", totalGb: "N/A" })),
+            mem.info().catch(() => ({ totalMemMb: 0, usedMemMb: 0, freeMemMb: 0 })),
+            cpu.usage().catch(() => 0)
+        ]);
+
+        const totalGB = (memInfo.totalMemMb / 1024 || 0).toFixed(2);
+        const usedGB = (memInfo.usedMemMb / 1024 || 0).toFixed(2);
+        const freeGB = (memInfo.freeMemMb / 1024 || 0).toFixed(2);
+        const cpuList = os.cpus() || [];
+        const cpuModel = cpuList[0]?.model || "Unknown CPU";
+        const cpuSpeed = cpuList[0]?.speed || "N/A";
+        const cpuCores = cpuList.length || 0;
+        
+        // Pengecekan aman buat fungsi runtime
+        const vpsUptime = typeof runtime === "function" ? runtime(os.uptime()) : `${(os.uptime() / 3600).toFixed(1)} Jam`;
+        const botUptime = typeof runtime === "function" ? runtime(process.uptime()) : `${(process.uptime() / 3600).toFixed(1)} Jam`;
+        
+        const latency = (speed() - start).toFixed(2);
+        const loadAvg = os.loadavg().map(n => n.toFixed(2)).join(" | ");
+        const nodeVersion = process.version;
+        const platform = os.platform();
+        const hostname = os.hostname();
+        const arch = os.arch();
+
+        const textPing = `
+<blockquote><b>⚙️ SYSTEM STATUS</b></blockquote>
+<b>• OS :</b> ${nou.os.type()} (${osName})
+<b>• Platform :</b> ${platform.toUpperCase()}
+<b>• Arch :</b> ${arch}
+<b>• Hostname :</b> ${hostname}
+
+<blockquote><b>💾 STORAGE & RAM</b></blockquote>
+<b>• Disk :</b> ${driveInfo.usedGb}/${driveInfo.totalGb} GB
+<b>• RAM :</b> ${usedGB}/${totalGB} GB (Free: ${freeGB} GB)
+
+<blockquote><b>🧠 CPU INFO</b></blockquote>
+<b>• Model :</b> ${cpuModel}
+<b>• Core(s) :</b> ${cpuCores}
+<b>• Speed :</b> ${cpuSpeed} MHz
+<b>• Usage :</b> ${cpuUsage.toFixed(2)}%
+<b>• Load Avg :</b> ${loadAvg}
+
+<blockquote><b>🤖 BOT STATUS</b></blockquote>
+<b>• Ping :</b> ${latency} ms
+<b>• Bot Uptime :</b> ${botUptime}
+<b>• VPS Uptime :</b> ${vpsUptime}
+<b>• Node.js :</b> ${nodeVersion}
+`.trim();
+
+        // 🔥 INI DIA TOMBOL 1 DOANG (TULISAN SUPPORT KE URL OWNER) 🔥
+        const keyboard = {
+            inline_keyboard: [
+                [
+                    { text: "📞 Support", url: `https://t.me/${config.ownerUsername}` }
+                ]
+            ]
+        };
+
+        // Hapus pesan "⏳ Sedang mengambil data..."
+        await ctx.telegram.deleteMessage(ctx.chat.id, waitMsg.message_id).catch(() => {});
+        
+        // Kirim hasil ping beserta foto menu & tombol Support
+        return ctx.replyWithPhoto(config.pinkInfoImage, {
+            caption: textPing,
+            parse_mode: "HTML",
+            reply_markup: keyboard
+        });
+
+    } catch (err) {
+        return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengambil status sistem:\n<code>${err.message}</code>`, { parse_mode: "HTML" });
+    }
+}
+
+// ===== DELETE ALL SALDO USER (OWNER ONLY) =====
+case "deleteallsaldo":
+case "delallsaldo": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+
+    const users = loadUsers();
+    if (!users || users.length === 0) {
+        return ctx.reply("📭 Belum ada user terdaftar di database.");
+    }
+
+    // Set status owner sedang dalam tahap konfirmasi
+    pendingDeleteAllSaldo[fromId] = true;
+
+    const confirmText = `
+⚠️ <b>PERINGATAN BAHAYA (SAPU JAGAT)</b> ⚠️
+━━━━━━━━━━━━━━━━━━━━━━
+Apakah Anda yakin ingin <b>MENGHAPUS SEMUA SALDO USER</b> menjadi Rp0?
+Tindakan ini tidak dapat dibatalkan dan uang user akan hangus!
+
+👇 <b>Silakan balas pesan ini:</b>
+Ketik <code>oke</code> untuk melanjutkan penghapusan.
+Ketik <code>batal</code> untuk membatalkan.
+`.trim();
+
+    return ctx.reply(confirmText, { parse_mode: "HTML" });
+}
+
+
+
 // ===== GET/DEL STOCK (OWNER ONLY) =====
 case "getstock":
 case "delstock":
@@ -2384,7 +2601,11 @@ bot.action("buyscript", async (ctx) => {
     const scriptsList = loadScripts();
 
     if (!scriptsList.length)
-        return ctx.answerCbQuery("Stok script kosong", { show_alert: true });
+        return ctx.answerCbQuery(`
+💻 Stok Script Kosong
+
+😕 Untuk saat ini belum ada script yang bisa diproses.
+Pantau terus ya, biasanya restock nggak lama kok.`, { show_alert: true });
 
     await ctx.answerCbQuery().catch(() => {});
 
@@ -2419,7 +2640,11 @@ bot.action("buyapp", async (ctx) => {
     const categories = Object.keys(stocks);
 
     if (!categories.length)
-        return ctx.answerCbQuery("Stok apps kosong", { show_alert: true });
+        return ctx.answerCbQuery(`
+📱 Stok Apps Kosong
+
+🛑 Aplikasi yang kamu cari lagi nggak tersedia nih.
+Tunggu update selanjutnya ya, bakal kami isi lagi secepatnya.`, { show_alert: true });
 
     await ctx.answerCbQuery().catch(() => {});
 
@@ -2534,7 +2759,11 @@ bot.action("buydo", async (ctx) => {
   const categories = Object.keys(doData);
 
   if (!categories.length)
-    return ctx.answerCbQuery("Stok DO kosong", { show_alert: true });
+    return ctx.answerCbQuery(`
+🧾 Stok DO Kosong
+
+🌊 Saat ini Digital Ocean belum tersedia.
+Tim lagi cek ketersediaan, mohon tunggu update berikutnya ya.`, { show_alert: true });
 
   await ctx.answerCbQuery().catch(() => {});
   
@@ -2570,7 +2799,11 @@ bot.action("buydo", async (ctx) => {
 
 bot.action("buyvps", async (ctx) => {
   if (!config.apiDigitalOcean)
-    return ctx.answerCbQuery("Fitur VPS belum tersedia", { show_alert: true });
+    return ctx.answerCbQuery(`
+🖥️ Fitur VPS Belum Tersedia
+
+🚧 Layanan VPS masih dalam tahap persiapan.
+Kami sedang menyiapkan sistemnya agar bisa segera digunakan.`, { show_alert: true });
 
   await ctx.answerCbQuery().catch(() => {});
 
@@ -2605,8 +2838,11 @@ bot.action("buyvps", async (ctx) => {
 // ===== MENU BUY PANEL =====
 bot.action("buypanel", async (ctx) => {
   if (!isPanelReady()) {
-    return ctx.answerCbQuery(
-      "❌ Stok panel sedang kosong, silakan tunggu restock.",
+    return ctx.answerCbQuery(`
+🎛️ Stok Panel Sedang Kosong
+
+📌 Panel lagi habis untuk sementara.
+Restock akan dilakukan secepatnya, pantau terus ya.`,
       { show_alert: true }
     ).catch(() => {});
   }
@@ -2652,8 +2888,11 @@ bot.action("buypanel", async (ctx) => {
 // ===== MENU BUY ADMIN =====
 bot.action("buyadmin", async (ctx) => {
   if (!isPanelReady()) {
-    return ctx.answerCbQuery(
-      "❌ Stok admin panel kosong",
+    return ctx.answerCbQuery(`
+👑 Stok Admin Panel Kosong
+
+🔒 Admin panel sedang tidak tersedia saat ini.
+Silakan tunggu hingga stok dibuka kembali.`,
       { show_alert: true }
     ).catch(() => {});
   }
@@ -2812,19 +3051,50 @@ Tingkatkan terus transaksi Anda dan jadilah Top Pengguna di bot kami!
 // ==========================================
 
 bot.action("smm_menu", async (ctx) => {
+    // 🔥 CEK APAKAH API SMM SUDAH DIISI ATAU BELUM 🔥
+    if (!config.smm || !config.smm.apiId || !config.smm.apiKey) {
+        return ctx.answerCbQuery(`
+⚙️ Fitur SMM Belum Tersedia
+
+🚫 Layanan SMM masih belum aktif.
+Sistem API-nya lagi dalam tahap konfigurasi oleh Owner.
+Nanti kalau sudah siap, fitur ini bisa langsung dipakai.`, { show_alert: true }).catch(() => {});
+    }
+
     await ctx.answerCbQuery().catch(() => {});
     activeMenus[ctx.from.id] = ctx.callbackQuery.message.message_id;
 
     const textSmm = `<blockquote>📈 <b>SMM PANEL AUTO ORDER</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━━━━\nLayanan suntik Sosmed (Followers, Likes, Views, dll) termurah dan otomatis 24 Jam!\n\nSilakan pilih menu di bawah ini:`;
-    const keyboard = { inline_keyboard: [[{ text: "🔍 Cari & Order Layanan", callback_data: "smm_search" }], [{ text: "📦 Status Pesanan", callback_data: "smm_status" }, { text: "🔄 Refill (Garansi)", callback_data: "smm_refill" }], [{ text: "💰 Cek Saldo Pusat (Owner)", callback_data: "smm_cek_pusat" }], [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }]] };
+    
+    const keyboard = {
+        inline_keyboard: [
+            [
+                { text: "🔍 Cari & Order Layanan", callback_data: "smm_search" }
+            ], 
+            [
+                { text: "📦 Status Pesanan", callback_data: "smm_status" }, 
+                { text: "🔄 Refill (Garansi)", callback_data: "smm_refill" }
+            ], 
+            ...(isOwner(ctx) ? [[
+                { text: "💰 Cek Saldo Pusat (Owner)", callback_data: "smm_cek_pusat" }
+            ]] : []),
+            [
+                { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }
+            ]
+        ] 
+    };
 
     try {
-        await ctx.editMessageMedia({ type: "photo", media: config.katalogImage, caption: textSmm, parse_mode: "HTML" }, { reply_markup: keyboard });
+        await ctx.editMessageMedia(
+            { type: "photo", media: config.katalogImage, caption: textSmm, parse_mode: "HTML" },
+            { reply_markup: keyboard }
+        );
     } catch (err) {
         await ctx.deleteMessage().catch(() => {});
         await ctx.replyWithPhoto(config.katalogImage, { caption: textSmm, parse_mode: "HTML", reply_markup: keyboard }).catch(() => {});
     }
 });
+
 
 bot.action("smm_search", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
@@ -2863,18 +3133,29 @@ bot.action("smm_refill", async (ctx) => {
 bot.action("smm_cek_pusat", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     if (!isOwner(ctx)) return ctx.reply("❌ Fitur khusus Owner!");
+    
     const waitMsg = await ctx.reply("⏳ <i>Mengecek saldo ke server pusat...</i>", {parse_mode: "HTML"});
     try {
         const params = new URLSearchParams();
         params.append('api_id', config.smm.apiId);
         params.append('api_key', config.smm.apiKey);
-        const res = await axios.post(`${config.smm.baseUrl}/profile`, params);
-        if (!res.data || res.data.status === false) throw new Error(res.data.data || "Gagal cek saldo");
-        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `<blockquote>💰 <b>SALDO PUSAT (FAYUPEDIA)</b></blockquote>\n\n💳 <b>Sisa Saldo:</b> Rp ${Number(res.data.data.balance).toLocaleString('id-ID')}`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
+        
+        // 🔥 FIX ENDPOINT BERDASARKAN DOKUMENTASI 🔥
+        const res = await axios.post(`${config.smm.baseUrl}/balance`, params);
+        
+        if (!res.data || res.data.status === false) {
+            throw new Error(res.data.data || res.data.message || "Gagal cek saldo");
+        }
+        
+        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, 
+            `<blockquote>💰 <b>SALDO PUSAT (FAYUPEDIA)</b></blockquote>\n\n💳 <b>Sisa Saldo:</b> Rp ${Number(res.data.data.balance).toLocaleString('id-ID')}`, 
+            { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } }
+        );
     } catch (err) {
         await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengecek saldo pusat: ${err.message}`);
     }
 });
+
 
 // BAYAR SALDO SMM
 bot.action("smm_pay_saldo", async (ctx) => {

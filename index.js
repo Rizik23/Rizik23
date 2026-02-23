@@ -87,8 +87,10 @@ await client.start({
     bot.launch();
 
     const userCommands = [
-      { command: "start", description: "Tampilkan Menu Utama Kael 🐸" },
-      { command: "menu", description: "Kaell Imupp 🦄" }
+      { command: "ping", description: "Mᴇʟɪʜᴀᴛ ~Sᴛᴀᴛᴜs Bᴏᴛ Fᴜʟʟ ™Tᴀᴍᴘɪʟᴀɴ 🧸" },
+      { command: "start", description: "Tᴀᴍᴘɪʟ'Kᴀɴ Mᴇɴᴜ Uᴛᴀᴍᴀ Kᴀᴇʟʟ 🍁" },
+      { command: "menu", description: "Kᴀᴇʟʟ Gᴀɴᴛᴇɴɢ Tʜᴇ Rᴏᴡʀʀ 🦄" },
+      { command: "help", description: "Cᴀʀᴀ Mᴇɴɢ-Gᴜɴᴀᴋᴀɴ Bᴏᴛ 🆘" }
     ];
 
     const ownerCommands = [
@@ -103,9 +105,15 @@ await client.start({
       { command: "addstockdo", description: "Tambah stock DO" },
       { command: "delstockdo", description: "Hapus stock DO" },
       { command: "getstockdo", description: "Lihat stock DO" },
+      { command: "addprompt", description: "Tambah stock DO" },
+      { command: "delprompt", description: "Hapus stock DO" },
+      { command: "getprompt", description: "Lihat stock DO" },
       { command: "addsaldo", description: "Tambah Saldo User" },
       { command: "delsaldo", description: "Hapus Saldo Jumlah" },
-      { command: "userlist", description: "Daftar user" }
+      { command: "userlist", description: "Daftar user" },
+      { command: "cekipbot", description: "Menampilkan ip Bot" },
+      { command: "lihatallsaldo", description: "Menampilkan Saldo user" },
+      { command: "deleteallsaldo", description: "Menghapus Saldo user" }
     ];
 
     await bot.telegram.setMyCommands(userCommands);

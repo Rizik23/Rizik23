@@ -3,15 +3,19 @@ module.exports = {
  // ==== Bot Setting ========
   botToken: "8542010252:AAGiMXol_TwOmdbWGP52KPXQABas4jZGkf4",
   botUsername: "ElikaMd_bot", // * username bot tanpa @
-  menuImage: "https://tmpfiles.org/dl/25539099/1771702158731.png",
-  katalogImage: "https://tmpfiles.org/dl/25538833/file_000000003d2472089efb8382ea472f0c.png",
-  referralImage: "https://tmpfiles.org/dl/25574179/file_000000004fe07206b5eeabf4aac9a109.png",
   prefix: "/", // * jangan di ganti
   ownerName: "kaell", // * nama ini nama telegram, tapi bebas
   ownerUsername: "Myzxa", // * username tanpa memakai @
   ownerId: "1402991119", // * ownerid pertama
   channelId: "-1003722756127", // * notifikasi pembelian ke channel memakai id
   channelLink: "https://t.me/MyThe5", // * untun channel di button
+  
+  // ==== Image Setting =========
+  menuImage: "https://tmpfiles.org/dl/25539099/1771702158731.png", // * gambar menu utama awala pas /start
+  katalogImage: "https://tmpfiles.org/dl/25538833/file_000000003d2472089efb8382ea472f0c.png", // * gambar shop menu
+  referralImage: "https://tmpfiles.org/dl/25574179/file_000000004fe07206b5eeabf4aac9a109.png", // * gambar menu referral
+  helpMenuImage: "https://tmpfiles.org/dl/25691547/1771835255396.png", //* help faq bantuan
+  pinkInfoImage: "https://tmpfiles.org/dl/25691685/1771834760932.png", // * gambar ping
   
   // ===== Userbot Setting dapetin di web telegram org=====
   // * bisa di isi atau juga bisa di kosongin di skip
@@ -60,7 +64,7 @@ module.exports = {
     // --- Suntik Sosmed Setting ( FayuPedia ) ---
   smm: {
       apiId: '177578', // Ganti dengan API ID lu dari web Fayupedia
-      apiKey: 'g3id7q-zzqukj-lpe5cl-9bsbyl-iykryu', // Ganti dengan API KEY lu
+      apiKey: 'yviwzb-3uiu2z-9znevl-n2fsg1-yoaqlp', // Ganti dengan API KEY lu
       baseUrl: 'https://fayupedia.id/api', 
       profitMargin: 1.3 // Untung lu 30%
   },
