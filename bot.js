@@ -1518,7 +1518,7 @@ case "start": {
                     { text: "⭐ Developer ", callback_data: "sosmed_admin" }
                 ],
                 [
-                   { text: "🎧 CS / Tiket Bantuan", callback_data: "cs_ai_start" } }
+                   { text: "🎧 CS / Tiket Bantuan", callback_data: "cs_ai_start" }
                 ]
             ]
         }
