@@ -2145,7 +2145,7 @@ Selamat datang di bot Auto Order! Berikut adalah panduan lengkap cara menggunaka
 Kamu bisa mengisi saldo dengan 2 cara:
 • <b>Via Tombol:</b> Ketik <code>/menu</code>, lalu klik tombol <b>💳 Deposit Saldo</b>.
 • <b>Via Command:</b> Ketik <code>${config.prefix}deposit nominal</code> (Contoh: <code>${config.prefix}deposit 20000</code>).
-<i>Sistem akan memunculkan kode QRIS. Silakan scan menggunakan DANA, GoPay, OVO, dll. Saldo akan masuk secara otomatis!</i>
+<i>Sistem akan memunculkan kode QRIS. Silakan scan menggunakan DANA, GoPay, OVO, dll. Saldo akan masuk otomatis!</i>
 
 <blockquote><b>🛒 2. CARA BELI PRODUK & PEMBAYARAN</b></blockquote>
 • Ketik <code>/menu</code> dan klik <b>🛍️ Katalog Produk</b> untuk melihat semua layanan.
@@ -2155,9 +2155,9 @@ Kamu bisa mengisi saldo dengan 2 cara:
   2. <b>QRIS</b> (Bayar langsung lunas via scan kode QR).
 
 <blockquote><b>⚡ 3. CARA BELI PANEL</b></blockquote>
-• <b>Cara 1:</b> Ketik langsung <code>${config.prefix}buypanel usernamekamu</code> (Contoh: <code>${config.prefix}buypanel Budi123</code>). Pastikan username tidak pakai spasi!
+• <b>Cara 1:</b> Ketik <code>${config.prefix}buypanel usernamekamu</code> (Contoh: <code>${config.prefix}buypanel Budi123</code>).
 • <b>Cara 2:</b> Masuk ke Katalog -> klik Panel -> lalu balas pesan bot dengan username.
-• Pilih RAM yang diinginkan dan lakukan pembayaran. Detail akun panel akan dikirim otomatis.
+• Pilih RAM yang diinginkan dan lakukan pembayaran. Detail akun dikirim otomatis.
 
 <blockquote><b>🤝 4. CARA DAPAT SALDO GRATIS (REFERRAL)</b></blockquote>
 • Ketik <code>${config.prefix}ref</code> atau klik tombol <b>🤝 CODE REFERRAL</b> di menu utama.
@@ -2168,10 +2168,13 @@ Kamu bisa mengisi saldo dengan 2 cara:
 Jika pesananmu belum masuk, deposit nyangkut, atau ada kendala teknis lainnya, silakan klik tombol Hubungi Admin di bawah.
 `.trim();
 
-    // 🔥 KODE DI UBAH JADI PAKE FOTO (replyWithPhoto) 🔥
-    return ctx.replyWithPhoto(config.helpMenuImage, {
-        caption: helpText,
+    // 🔥 FIX: Kirim gambar terpisah dulu biar teksnya gak kena limit 1024 karakter 🔥
+    await ctx.replyWithPhoto(config.helpMenuImage).catch(() => {});
+
+    // Baru kirim teks panjang + tombolnya
+    return ctx.reply(helpText, {
         parse_mode: "HTML",
+        disable_web_page_preview: true,
         reply_markup: {
             inline_keyboard: [
                 [
@@ -2185,6 +2188,7 @@ Jika pesananmu belum masuk, deposit nyangkut, atau ada kendala teknis lainnya, s
         }
     });
 }
+
 
 // ===== CEK PING & STATUS SYSTEM =====
 case "ping": {
