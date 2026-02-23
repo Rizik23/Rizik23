@@ -20,12 +20,12 @@ module.exports = {
   // ===== Userbot Setting dapetin di web telegram org=====
   // * bisa di isi atau juga bisa di kosongin di skip
   apiId: 32424796, // api_id Telegram
-  apiHash: "8013761f4631b998c60bfe92d373ee4e",
-  phoneNumber: "6285213354966", 
+  apiHash: "8013761f4631b998c60bfe92d373ee4e", // api hash telegram
+  phoneNumber: "6285213354966", // nomer yang terkait di telegram kalian
   sessionFile: "./session.txt", 
 
   // "orderkuota" atau "pakasir"
-  paymentGateway: "pakasir",
+  paymentGateway: "pakasir", // bisa di ganti orderkuota atau pakasir
 
   // ===== OrderKuota Config =====
   orderkuota: {
@@ -49,6 +49,17 @@ module.exports = {
     gopay: "085864521929"
   },
   
+    sosmed: {
+      ig: "https://instagram.com/zyntherion_",
+      wa: "https://wa.me/6285864521929",
+      tele: "https://t.me/Myzxa",
+      tiktok: "https://tiktok.com/@zayntherion",
+      chTele: "https://t.me/MyThe5",
+      chWa: "https://whatsapp.com/channel/0029Vay9cpWC6ZvZIe86sd1D",
+      testi: "https://t.me/TestsiKaell" // Link channel khusus bukti TF/Testi
+  },
+
+  
   // Apikey Digitalocean
   apiDigitalOcean: "", // * kalau api di isi, otomatis button vps, do, aktip dan sebalik nya kalau tidak di isi, maka otomatis ter ditect restock sedang kosong.
   
@@ -57,14 +68,14 @@ module.exports = {
   egg: "15",
   nestid: "5",
   loc: "1",
-  domain: "https://root-panel.my.id", // isi kalau ada, bisa di kosongin juga
-  apikey: "ptlc_iyu12koqwIajodHaieoqpHdgTgquOapsjaoJaisjoKAK2KSOSJ", // ini juga sama bisa di isi bisa di biarkan
-  capikey: "ptla_iyu12koqwIajodHaieoqpHdgTgquOapsjaoJaisjoKAK2KSOSJ", // ini juga sama bisa di isi bisa di biarkan
+  domain: "", // isi kalau ada, bisa di kosongin juga
+  apikey: "", // ini juga sama bisa di isi bisa di biarkan
+  capikey: "", // ini juga sama bisa di isi bisa di biarkan
   
     // --- Suntik Sosmed Setting ( FayuPedia ) ---
   smm: {
-      apiId: '177578', // Ganti dengan API ID lu dari web Fayupedia
-      apiKey: 'yviwzb-3uiu2z-9znevl-n2fsg1-yoaqlp', // Ganti dengan API KEY lu
+      apiId: '', // isi dengan API ID lu dari web https://fayupedia.id/api
+      apiKey: '', // isi dengan API KEY lu
       baseUrl: 'https://fayupedia.id/api', 
       profitMargin: 1.3 // Untung lu 30%
   },

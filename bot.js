@@ -1093,6 +1093,12 @@ bot.action("deladmin-back", async (ctx) => {
     bot.action("deposit_menu", async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
         
+        // 🔥 HAPUS GAMBAR DARI /HELP JIKA ADA 🔥
+        if (global.helpPhotos && global.helpPhotos[ctx.from.id]) {
+            try { await ctx.telegram.deleteMessage(ctx.chat.id, global.helpPhotos[ctx.from.id]); } catch (e) {}
+            delete global.helpPhotos[ctx.from.id];
+        }
+
         const depositButtons = [
             [
                 { text: "Rp 5.000", callback_data: "deposit_pay|5000" },
@@ -1120,6 +1126,7 @@ bot.action("deladmin-back", async (ctx) => {
             }
         ).catch(() => {});
     });
+
 
 bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
@@ -1402,83 +1409,87 @@ Proses <i>reset</i> saldo (Sapu Jagat) telah selesai dilakukan.
 
 
         switch (command) {
-            // ===== MENU / START =====
-            case "menu":
-            case "start": {
-                // ---> LOGIKA DEEP LINK REDEEM VOUCHER <---
-                if (args[0] && args[0].startsWith("redeem_")) {
-                    const kode = args[0].replace("redeem_", "").toUpperCase();
-                    const vouchers = loadVouchers();
-                    
-                    if (!vouchers[kode]) return ctx.reply("❌ Kode voucher tidak ditemukan atau salah.");
-                    
-                    const voucher = vouchers[kode];
-                    if (voucher.kuota <= 0) return ctx.reply("❌ Maaf, kuota voucher ini sudah habis.");
-                    if (voucher.claimedBy.includes(fromId)) return ctx.reply("❌ Kamu sudah pernah klaim voucher ini!");
-                    
-                    const users = loadUsers();
-                    const userIndex = users.findIndex(u => u.id === fromId);
-                    if (userIndex === -1) return ctx.reply("❌ Error: User tidak ditemukan."); 
-                    
-                    // Tambah saldo & kurangi kuota
-                    users[userIndex].balance = (users[userIndex].balance || 0) + voucher.nominal;
-                    voucher.kuota -= 1;
-                    voucher.claimedBy.push(fromId);
-                    
-                    saveUsers(users);
-                    saveVouchers(vouchers);
-                    
-                    return ctx.reply(
-                        `🎉 <b>SELAMAT!</b>\n\n` +
-                        `Kamu berhasil menukarkan kode voucher <code>${kode}</code> dari link!\n` +
-                        `💰 Saldo bertambah Rp${voucher.nominal.toLocaleString('id-ID')}\n` +
-                        `💳 Saldo sekarang: Rp${users[userIndex].balance.toLocaleString('id-ID')}`, 
-                        { parse_mode: "HTML" }
-                    );
-                }
-                
-                // Tampilkan Menu Utama Default
-                return ctx.replyWithPhoto(config.menuImage, {
-                    caption: menuTextBot(ctx),
-                    parse_mode: "HTML",
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: "🛍️ Katalog Produk", callback_data: "katalog"  }
-                            ], 
-                            [
-                                { text: "👤 Cek Profil", callback_data: "profile" },
-                                { text: "📮 Cek History", callback_data: "history" }
-                            ], 
-                            [
-                                { text: "🤝 CODE REFERRAL", callback_data: "menu_referral" }
-                            ], 
-                            [
-                                { text: "💳 Deposit Saldo", callback_data: "deposit_menu" },
-                                { text: "🏆 Top Pengguna", callback_data: "top_users" }
-                            ], 
-                            [
-                                { text: "📢 Channel", url: config.channelLink  }
-                            ]
-                        ]
-                    }
-                });
-            }
+// ===== MENU / START =====
+case "menu":
+case "start": {
 
-            case "ownermenu":
-            case "ownmenu": {
-                return ctx.replyWithPhoto(config.menuImage, {
-                    caption: menuTextOwn(),
-                    parse_mode: "html",
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: "📢 Channel", url: config.channelLink }
-                            ]
-                        ]
-                    }
-                });
-            }
+    // ---> LOGIKA DEEP LINK REDEEM VOUCHER <---
+    if (args[0] && args[0].startsWith("redeem_")) {
+        const kode = args[0].replace("redeem_", "").toUpperCase();
+        const vouchers = loadVouchers();
+
+        if (!vouchers[kode])
+            return ctx.reply("❌ Kode voucher tidak ditemukan atau salah.");
+
+        const voucher = vouchers[kode];
+
+        if (voucher.kuota <= 0)
+            return ctx.reply("❌ Maaf, kuota voucher ini sudah habis.");
+
+        if (voucher.claimedBy.includes(fromId))
+            return ctx.reply("❌ Kamu sudah pernah klaim voucher ini!");
+
+        const users = loadUsers();
+        const userIndex = users.findIndex(u => u.id === fromId);
+
+        if (userIndex === -1)
+            return ctx.reply("❌ Error: User tidak ditemukan.");
+
+        // Tambah saldo & kurangi kuota
+        users[userIndex].balance =
+            (users[userIndex].balance || 0) + voucher.nominal;
+
+        voucher.kuota -= 1;
+        voucher.claimedBy.push(fromId);
+
+        saveUsers(users);
+        saveVouchers(vouchers);
+
+        return ctx.reply(
+            `🎉 <b>SELAMAT!</b>\n\n` +
+            `Kamu berhasil menukarkan kode voucher <code>${kode}</code> dari link!\n` +
+            `💰 Saldo bertambah Rp${voucher.nominal.toLocaleString('id-ID')}\n` +
+            `💳 Saldo sekarang: Rp${users[userIndex].balance.toLocaleString('id-ID')}`,
+            { parse_mode: "HTML" }
+        );
+    }
+
+    // Tampilkan Menu Utama Default
+    return ctx.replyWithPhoto(config.menuImage, {
+        caption: menuTextBot(ctx),
+        parse_mode: "HTML",
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: "🛍️ Katalog Produk", callback_data: "katalog" }
+                ],
+                [
+                    { text: "💳 Deposit Saldo", callback_data: "deposit_menu" },
+                    { text: "🏆 Top Pengguna", callback_data: "top_users" }
+                ],
+                [
+                    { text: "👤 Informasi", callback_data: "informasi_admin" },
+                    { text: "⭐ Developer ", callback_data: "sosmed_admin" }
+                ]
+            ]
+        }
+    });
+}
+
+case "ownermenu":
+case "ownmenu": {
+    return ctx.replyWithPhoto(config.menuImage, {
+        caption: menuTextOwn(),
+        parse_mode: "html",
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: "📢 Channel", url: config.channelLink }
+                ]
+            ]
+        }
+    });
+}
 
 // ===== FITUR VOUCHER & REFFERAL =====
 case "addvoucher": {
@@ -2168,10 +2179,13 @@ Kamu bisa mengisi saldo dengan 2 cara:
 Jika pesananmu belum masuk, deposit nyangkut, atau ada kendala teknis lainnya, silakan klik tombol Hubungi Admin di bawah.
 `.trim();
 
-    // 🔥 FIX: Kirim gambar terpisah dulu biar teksnya gak kena limit 1024 karakter 🔥
-    await ctx.replyWithPhoto(config.helpMenuImage).catch(() => {});
+    // 🔥 FIX: Simpan ID Gambar biar bisa dihapus nanti 🔥
+    const photoMsg = await ctx.replyWithPhoto(config.helpMenuImage).catch(() => {});
+    if (photoMsg) {
+        global.helpPhotos = global.helpPhotos || {};
+        global.helpPhotos[ctx.from.id] = photoMsg.message_id;
+    }
 
-    // Baru kirim teks panjang + tombolnya
     return ctx.reply(helpText, {
         parse_mode: "HTML",
         disable_web_page_preview: true,
@@ -2188,6 +2202,7 @@ Jika pesananmu belum masuk, deposit nyangkut, atau ada kendala teknis lainnya, s
         }
     });
 }
+
 
 
 // ===== CEK PING & STATUS SYSTEM =====
@@ -2708,7 +2723,7 @@ bot.action("profile", async (ctx) => {
 
     ctx.reply(profileText, {
         parse_mode: "HTML", disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }]] }
+        reply_markup: { inline_keyboard: [[{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "informasi_admin"  }]] }
     }).catch(() => {});
 });
 
@@ -2750,7 +2765,7 @@ bot.action("history", async (ctx) => {
         disable_web_page_preview: true,
         reply_markup: {
             inline_keyboard: [
-                [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }]
+                [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "informasi_admin"  }]
             ]
         }
     }).catch(() => {});
@@ -3233,11 +3248,17 @@ bot.action("back_to_main_menu", async (ctx) => {
   const captionText = menuTextBot(ctx);
   const keyboard = {
     inline_keyboard: [
-      [ { text: "🛍️ Katalog Produk", callback_data: "katalog" } ],
-      [ { text: "👤 Cek Profil", callback_data: "profile" }, { text: "📮 Cek History", callback_data: "history" } ],
-      [ { text: "🤝 CODE REFERRAL", callback_data: "menu_referral" } ],
-      [ { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }, { text: "🏆 Top Pengguna", callback_data: "top_users" } ],
-      [ { text: "📢 Channel", url: config.channelLink } ]
+      [ 
+         { text: "🛍️ Katalog Produk", callback_data: "katalog" } 
+      ],
+      [  
+         { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }, 
+         { text: "🏆 Top Pengguna", callback_data: "top_users" } 
+      ],
+      [ 
+         { text: "👤 Informasi", callback_data: "informasi_admin" },
+         { text: "⭐ Developer ", callback_data: "sosmed_admin" }
+      ]
     ]
   };
 
@@ -3260,6 +3281,12 @@ bot.action("back_to_main_menu", async (ctx) => {
     
 bot.action("katalog", async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
+
+  // 🔥 HAPUS GAMBAR DARI /HELP JIKA ADA 🔥
+  if (global.helpPhotos && global.helpPhotos[ctx.from.id]) {
+      try { await ctx.telegram.deleteMessage(ctx.chat.id, global.helpPhotos[ctx.from.id]); } catch (e) {}
+      delete global.helpPhotos[ctx.from.id];
+  }
 
   const storeMenuKeyboard = {
     inline_keyboard: [
@@ -3300,7 +3327,6 @@ Pilih kategori produk yang ingin dibeli:</blockquote>
       { reply_markup: storeMenuKeyboard }
     );
   } catch (err) {
-    // 🔥 FIX: JIKA PESAN SEBELUMNYA CUMA TEKS, HAPUS LALU KIRIM FOTO BARU 🔥
     if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
         await ctx.deleteMessage().catch(() => {});
         await ctx.replyWithPhoto(config.katalogImage, {
@@ -3309,6 +3335,108 @@ Pilih kategori produk yang ingin dibeli:</blockquote>
     }
   }
 });
+
+
+bot.action("informasi_admin", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+
+  const storeMenuKeyboard = {
+    inline_keyboard: [
+      [
+         { text: "👤 Cek Profil", callback_data: "profile" }, 
+         { text: "📮 Cek History", callback_data: "history" } 
+      ],
+      [  
+         { text: "🤝 CODE REFERRAL", callback_data: "menu_referral" } 
+      ],
+      [ 
+        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
+      ]
+    ]
+  };
+  const captionText = `
+<blockquote>👤 <b>INFORMASI AKUN & AKTIVITAS</b></blockquote>
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Pusat informasi untuk memantau detail akun, riwayat transaksi, dan program afiliasi (referral) kamu.
+
+<b>📝 Detail Menu:</b>
+• <b>Cek Profil:</b> Lihat detail ID, sisa saldo, dan statistik akun.
+• <b>Cek History:</b> Pantau riwayat pembelian dan transaksi terakhir.
+• <b>Code Referral:</b> Dapatkan saldo gratis dengan membagikan link!
+
+👇 <i>Silakan pilih menu di bawah ini:</i>
+`.trim();
+
+  try {
+    await ctx.editMessageMedia(
+      { type: "photo", media: config.katalogImage, caption: captionText, parse_mode: "HTML" },
+      { reply_markup: storeMenuKeyboard }
+    );
+  } catch (err) {
+    if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.katalogImage, {
+            caption: captionText, parse_mode: "HTML", reply_markup: storeMenuKeyboard
+        }).catch(() => {});
+    }
+  }
+});
+
+
+bot.action("sosmed_admin", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+
+  const storeMenuKeyboard = {
+    inline_keyboard: [
+      [
+         { text: "📸 Instagram", url: config.sosmed.ig }, 
+         { text: "💬 WhatsApp", url: config.sosmed.wa } 
+      ],
+      [  
+      ],
+         { text: "🌟 Testimoni", url: config.sosmed.testi } 
+      [  
+         { text: "✈️ Telegram", url: config.sosmed.tele },
+         { text: "🎵 TikTok", url: config.sosmed.tiktok } 
+      ],
+      [ 
+         { text: "📢 Ch Tele", url: config.sosmed.chTele },
+         { text: "🌐 Ch WA", url: config.sosmed.chWa } 
+      ],
+      [ 
+        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
+      ]
+    ]
+  };
+
+  const captionText = `
+<blockquote>🌐 <b>OFFICIAL SOCIAL MEDIA</b></blockquote>
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Mari berteman lebih dekat! Ikuti semua akun sosial media resmi kami untuk mendapatkan <i>update</i> terbaru, promo diskon, dan informasi menarik lainnya.
+
+<b>Kenapa harus follow?</b>
+• <b>Update Produk:</b> Info produk baru & restock harian.
+• <b>Promo Spesial:</b> Diskon kilat dan bagi-bagi voucher khusus <i>followers</i>.
+• <b>Testimoni:</b> Bukti transaksi 100% aman & terpercaya.
+
+👇 <i>Klik tombol di bawah ini untuk mengunjungi profil kami:</i>
+`.trim();
+
+  try {
+    await ctx.editMessageMedia(
+      { type: "photo", media: config.katalogImage, caption: captionText, parse_mode: "HTML" },
+      { reply_markup: storeMenuKeyboard }
+    );
+  } catch (err) {
+    if (err.description?.includes("there is no media in the message") || err.description?.includes("message to edit not found")) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.katalogImage, {
+            caption: captionText, parse_mode: "HTML", reply_markup: storeMenuKeyboard
+        }).catch(() => {});
+    }
+  }
+});
+
 
 
 bot.action("buysubdo_menu", async (ctx) => {
@@ -3325,13 +3453,21 @@ Subdomain berfungsi untuk mengubah IP VPS kamu menjadi nama domain (contoh: <cod
 
 💰 <b>Harga:</b> Rp ${hargaSubdo.toLocaleString('id-ID')} / Subdomain
 ⚙️ <b>Proses:</b> Otomatis (Cloudflare API)
+📡 <b>Server Domain:</b> Active 🟢
 
-👇 <b>CARA ORDER:</b>
+<blockquote> 👇 <b>CARA ORDER:</b></blockquote>
 Ketik perintah di bawah ini pada chat:
 <code>${config.prefix}buysubdo namasubdomain ip_vps</code>
 
-<b>Contoh:</b>
+<blockquote> <b>Contoh:</b></blockquote
 <code>${config.prefix}buysubdo serverku 192.168.1.1</code>
+
+<blockquote>📜 <b>POLICY & NOTES </b></blockquote>
+• Anti-DDoS: Strict isolation applied✅
+• VPS Sync: IP must be active (Live)✅
+• Node Setup: Prefix [node] allowed✅
+• Service: High-availability DNS✅
+• Otomatis Free 1 domain node untuk panel ptero✨
 `.trim();
 
     const keyboard = {
@@ -3502,7 +3638,7 @@ bot.action("menu_referral", async (ctx) => {
   const referralKeyboard = {
     inline_keyboard: [
       [
-        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
+        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "informasi_admin" }
       ]
     ]
   };
