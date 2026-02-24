@@ -4,6 +4,8 @@ const { createAdmin, createPanel, createPayment, cekPaid, createVPSDroplet, getD
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
+const crypto = require("crypto");
+const JsConfuser = require("js-confuser");
 const prefix = config.prefix || ".";
 const scriptDir = path.join(__dirname, "scripts");
 const scriptDB = path.join(__dirname, "/db/scripts.json");
@@ -64,6 +66,68 @@ const saveRatings = (d) => fs.writeFileSync(ratingDB, JSON.stringify(d, null, 2)
 // ===================== FUNGSI UTILITAS =====================
 
 const USERS_PER_PAGE = 10;
+
+// ===== HELPER ENCRYPT BOT =====
+const createProgressBar = (percentage) => {
+    const total = 10;
+    const filled = Math.round((percentage / 100) * total);
+    return "▰".repeat(filled) + "▱".repeat(total - filled);
+};
+
+async function updateProgress(ctx, message, percentage, status) {
+    const bar = createProgressBar(percentage);
+    const levelText = percentage === 100 ? "✅ Selesai" : `⚙️ ${status}`;
+    try {
+        await ctx.telegram.editMessageText(
+            ctx.chat.id,
+            message.message_id,
+            null,
+            "```css\n" +
+            "🔒 EncryptBot\n" +
+            ` ${levelText} (${percentage}%)\n` +
+            ` ${bar}\n` +
+            "```\n" +
+            "PROSES ENCRYPT BY ELIKA",
+            { parse_mode: "Markdown" }
+        );
+    } catch (error) {}
+}
+
+function encodeInvisible(text) {
+    try {
+        const compressedText = text.replace(/\s+/g, ' ').trim();
+        const base64Text = Buffer.from(compressedText).toString('base64');
+        return '\u200B' + base64Text; 
+    } catch (e) {
+        return Buffer.from(text).toString('base64'); 
+    }
+}
+
+const getXObfuscationConfig = () => {
+    const generateXName = () => "xZ" + crypto.randomBytes(3).toString("hex"); 
+    return {
+        target: "node",
+        compact: true,
+        renameVariables: true,
+        renameGlobals: true,
+        identifierGenerator: () => generateXName(),
+        stringCompression: true,
+        stringConcealing: true,
+        stringEncoding: true,
+        controlFlowFlattening: 1, // Max flattening
+        flatten: true,
+        shuffle: true,
+        rgf: false, // Dimatikan agar tidak merusak fungsi async Node.js
+        deadCode: 0.2, 
+        opaquePredicates: true,
+        dispatcher: true,
+        globalConcealing: true,
+        objectExtraction: true,
+        duplicateLiteralsRemoval: true
+        // lock (selfDefending/antiDebug) dimatikan supaya TIDAK ERROR saat di-run
+    };
+};
+
 
 // Fungsi untuk escape karakter html khusus
 function escapeMarkdown(text) {
@@ -318,6 +382,10 @@ async function renderRatingPage(ctx, page) {
     let text = `<blockquote><b>🌟 ULASAN PENGGUNA (RATING)</b></blockquote>\n`;
     text += `📊 <b>Rata-rata:</b> ${avgStar} / 5.0 ⭐\n`;
     text += `👥 <b>Total Ulasan:</b> ${ratings.length} Pengguna\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `💡 <b>Cara Memberi Ulasan:</b>\n`;
+    text += `Ketik: <code>${config.prefix}rating [angka_bintang] [pesan_ulasan]</code>\n`;
+    text += `Contoh: <code>${config.prefix}rating 5 Prosesnya cepet banget!</code>\n`;
     text += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     currentItems.forEach((r, i) => {
@@ -2111,7 +2179,8 @@ case "getdb": {
             { path: "./db/users.json", name: "users.json" },
             { path: "./db/stocks.json", name: "stocks.json" },
             { path: "./db/digitalocean.json", name: "digitalocean.json" },
-            { path: "./db/prompts.json", name: "prompts.json" }
+            { path: "./db/prompts.json", name: "prompts.json" },
+            { path: "./db/ratings.json", name: "ratings.json" }
         ];
 
         for (let file of filesToSent) {
@@ -2514,6 +2583,94 @@ case "cekipbot": {
     }
 }
 
+// ===== COMMAND ENCRYPT SCRIPT (SUPER HARD) =====
+case "encx": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+
+    if (!ctx.message.reply_to_message || !ctx.message.reply_to_message.document) {
+        return ctx.reply("❌ *Error:* Balas file .js dengan `/encx`!", { parse_mode: "Markdown" });
+    }
+
+    const file = ctx.message.reply_to_message.document;
+    if (!file.file_name.endsWith(".js")) {
+        return ctx.reply("❌ *Error:* Hanya file .js yang didukung!", { parse_mode: "Markdown" });
+    }
+
+    const encryptedPath = path.join(__dirname, `x-encrypted-${file.file_name}`);
+
+    try {
+        const progressMessage = await ctx.reply(
+            "```css\n" +
+            "🔒 EncryptBot\n" +
+            " ⚙️ Memulai (Hardened X Invisible) (1%)\n" +
+            " " + createProgressBar(1) + "\n" +
+            "```\n" +
+            "PROSES ENCRYPT BY ELIKA",
+            { parse_mode: "Markdown" }
+        );
+
+        // 1. Mengunduh File menggunakan Axios
+        await updateProgress(ctx, progressMessage, 10, "Mengunduh File");
+        const fileLink = await ctx.telegram.getFileLink(file.file_id);
+        const response = await axios.get(fileLink.href, { responseType: "text" });
+        let fileContent = response.data;
+        
+        await updateProgress(ctx, progressMessage, 30, "Memvalidasi Kode");
+        try { new Function(fileContent); } catch (e) {
+            throw new Error(`Kode awal bermasalah/error sintaks: ${e.message}`);
+        }
+
+        // 2. Tahap Obfuscation Pertama (Melindungi Source Code)
+        await updateProgress(ctx, progressMessage, 50, "Obfuscation Tahap 1");
+        const obfuscated = await JsConfuser.obfuscate(fileContent, getXObfuscationConfig());
+        let obfuscatedCode = obfuscated.code || obfuscated;
+
+        // 3. Invisible Encoding
+        await updateProgress(ctx, progressMessage, 70, "Invisible Encoding");
+        const encodedInvisible = encodeInvisible(obfuscatedCode);
+        
+        // 4. Membuat Wrapper Unpacker
+        const wrapperCode = `
+            const _b = Buffer;
+            const _d = (e) => {
+                if(!e.startsWith('\\u200B')) return e;
+                return _b.from(e.slice(1),'base64').toString('utf-8');
+            };
+            eval(_d("${encodedInvisible}"));
+        `;
+
+        // 5. Tahap Obfuscation Kedua (Melindungi Unpacker & Menyembunyikan Eval)
+        await updateProgress(ctx, progressMessage, 85, "Obfuscation Tahap 2 (Armor)");
+        const finalObfuscated = await JsConfuser.obfuscate(wrapperCode, {
+            target: "node",
+            compact: true,
+            renameVariables: true,
+            stringConcealing: true,
+            controlFlowFlattening: 0.5
+        });
+
+        const finalCode = finalObfuscated.code || finalObfuscated;
+
+        // 6. Menyimpan & Mengirim File
+        await updateProgress(ctx, progressMessage, 95, "Finalisasi File");
+        fs.writeFileSync(encryptedPath, finalCode);
+
+        await ctx.replyWithDocument(
+            { source: encryptedPath, filename: `Enc-By-Elika-${file.file_name}` },
+            { caption: "✅ *File terenkripsi (Hardened X Invisible) siap!*\n💯 Source code telah dilindungi dengan Double Obfuscation!\n\nSUKSES ENCRYPT BY ELIKA 🕊", parse_mode: "Markdown" }
+        );
+        
+        await updateProgress(ctx, progressMessage, 100, "Selesai");
+
+        // Hapus file sementara
+        if (fs.existsSync(encryptedPath)) fs.unlinkSync(encryptedPath);
+
+    } catch (error) {
+        await ctx.reply(`❌ *Kesalahan:* ${error.message || "Tidak diketahui"}\n_Coba lagi dengan kode Javascript yang valid!_`, { parse_mode: "Markdown" });
+        if (fs.existsSync(encryptedPath)) fs.unlinkSync(encryptedPath);
+    }
+    break;
+}
 
 // ===== GET SCRIPT =====
 case "delscript":
