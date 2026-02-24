@@ -95,25 +95,30 @@ await client.start({
     
     const ownerCommands = [
       { command: "backup", description: "Bᴀᴄᴋᴜᴘ Dᴀᴛᴀʙᴀsᴇ Bᴏᴛ Sᴇᴄᴀʀᴀ Aᴍᴀɴ 🗂️" },
-      { command: "broadcast", description: "Kɪʀɪᴍ Pᴇsᴀɴ Kᴇ Sᴇʟᴜʀᴜʜ Uꜱᴇʀ 📣" },
+      { command: "broadcast", description: "Kɪʀɪᴍ PᴇsᴀΠ Kᴇ Sᴇʟᴜʀᴜʜ Uꜱᴇʀ 📣" },
       { command: "addscript", description: "Tᴀᴍʙᴀʜ Sᴛᴏᴋ Sᴄʀɪᴘᴛ Bᴀʀᴜ 📜" },
-      { command: "getscript", description: "Lɪʜᴀᴛ Dᴀғᴛᴀʀ Sᴄʀɪᴘᴛ 📂" },
-      { command: "delscript", description: "Hᴀᴘᴜs Sᴛᴏᴋ Sᴄʀɪᴘᴛ 🗑️" },
+      { command: "getscript", description: "Lɪʜᴀᴛ -Dᴀғᴛᴀʀ Sᴄʀɪᴘᴛ 📂" },
+      { command: "delscript", description: "^Hᴀᴘᴜs Sᴛᴏᴋ Sᴄʀɪᴘᴛ 🗑️" },
       { command: "addstock", description: "Tᴀᴍʙᴀʜ Sᴛᴏᴋ Aᴘᴘꜱ 📦" },
       { command: "delstock", description: "Hᴀᴘᴜs Sᴛᴏᴋ Aᴘᴘꜱ ❌" },
       { command: "getstock", description: "Cᴇᴋ Sᴛᴏᴋ Aᴘᴘꜱ 🔎" },
-      { command: "addstockdo", description: "Tᴀᴍʙᴀʜ Sᴛᴏᴋ Dɪɢɪᴛᴀʟ Oᴄᴇᴀɴ 🌊" },
-      { command: "delstockdo", description: "Hᴀᴘᴜs Sᴛᴏᴋ Dɪɢɪᴛᴀʟ Oᴄᴇᴀɴ 🚫" },
+      { command: "addstockdo", description: "Tᴀᴍʙᴀʜ ~Sᴛᴏᴋ Dɪɢɪᴛᴀʟ Oᴄᴇᴀɴ 🌊" },
+      { command: "delstockdo", description: "Hᴀᴘᴜ`s Sᴛᴏᴋ Dɪɢɪᴛᴀʟ Oᴄᴇᴀɴ 🚫" },
       { command: "getstockdo", description: "Cᴇᴋ Sᴛᴏᴋ Dɪɢɪᴛᴀʟ Oᴄᴇᴀɴ 🔍" },
-      { command: "addprompt", description: "Tᴀᴍʙᴀʜ Sᴛᴏᴋ Pʀᴏᴍᴘᴛ ✍️" },
-      { command: "delprompt", description: "Hᴀᴘᴜs Sᴛᴏᴋ Pʀᴏᴍᴘᴛ 🗑️" },
-      { command: "getprompt", description: "Lɪʜᴀᴛ Sᴛᴏᴋ Pʀᴏᴍᴘᴛ 📖" },
-      { command: "addsaldo", description: "Tᴀᴍʙᴀʜ Sᴀʟᴅᴏ Uꜱᴇʀ 💳" },
+      { command: "addprompt", description: "Tᴀᴍ'ʙᴀʜ Sᴛᴏᴋ Pʀᴏᴍᴘᴛ ✍️" },
+      { command: "delprompt", description: "Hᴀᴘᴜs Sᴛ★ᴋ Pʀᴏᴍᴘᴛ 🗑️" },
+      { command: "getprompt", description: "L↓ʜᴀᴛ Sᴛᴏᴋ Pʀᴏᴍᴘᴛ 📖" },
+      { command: "addsaldo", description: "Tᴀᴍʙᴀʜ Sᴀʟᴅᴏ ≠Uꜱᴇʀ 💳" },
       { command: "delsaldo", description: "Kᴜʀᴀɴɢɪ Sᴀʟᴅᴏ Uꜱᴇʀ 💸" },
-      { command: "userlist", description: "Dᴀғᴛᴀʀ Sᴇʟᴜʀᴜʜ Uꜱᴇʀ 👥" },
+      { command: "userlist", description: "Dᴀғᴛᴀʀ »Sᴇʟᴜʀᴜʜ Uꜱᴇʀ 👥" },
       { command: "cekipbot", description: "Lɪʜᴀᴛ IP Bᴏᴛ 🌐" },
       { command: "lihatallsaldo", description: "Lɪʜᴀᴛ Sᴇᴍᴜᴀ Sᴀʟᴅᴏ Uꜱᴇʀ 📊" },
-      { command: "deleteallsaldo", description: "Hᴀᴘᴜs Sᴇᴍᴜᴀ Sᴀʟᴅᴏ Uꜱᴇʀ ⚠️" }
+      { command: "deleteallsaldo", description: "Hᴀᴘᴜs Sᴇᴍ·ᴜᴀ Sᴀʟᴅᴏ Uꜱᴇʀ ⚠️" },
+      { command: "adddistributor", description: "Mᴇɴᴀᴍʙᴀʜ R★ʟʟᴇ Dɪs†ʀᴏ 🪙" },
+      { command: "addregular", description: "Mᴇɴᴀᴍʙᴀʜ ≈ʀᴏʟʟᴇ Rᴇɢᴜʟᴀʀ 💰" },
+      { command: "addvip", description: "Mᴇɴᴀᴍʙᴀʜ Vɪᴘ 💎" },
+      { command: "delrole", description: "Mᴇɴɢʜᴀᴘᴜs Rᴏʟʟᴇ ≈Usᴇʀ ♣" }
+      { command: "addvoucher", description: "Mᴇᴍʙᴜᴀᴛ Rᴇғᴇʀʀᴀʟ Sᴀʟᴅᴏ Dᴀɴ Kᴜᴏᴛᴀ 🪔" }
     ];
 
     await bot.telegram.setMyCommands(userCommands);

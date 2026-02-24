@@ -22,6 +22,7 @@ const orders = {};
 const pendingDeposit = {};
 const pendingCsChat = {};
 const activeMenus = {};
+const pendingSmmRefillStatus = {};
 const pendingSmmSearch = {}; 
 const smmTempData = {};
 const pendingSmmOrder = {}; 
@@ -29,8 +30,6 @@ const smmTempOrder = {};
 const pendingSmmStatus = {};
 const pendingSmmRefill = {};
 const pendingDeleteAllSaldo = {};
-
-
 
 // Inisialisasi database
 if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir);
@@ -96,6 +95,54 @@ function escapeHTML(str) {
   }[m]));
 }
 
+// ===== HELPER BACA WAKTU (HARI/BULAN/TAHUN) =====
+function parseTimeToMs(angka, satuan) {
+    const time = parseInt(angka);
+    if (isNaN(time)) return 0;
+    
+    satuan = satuan.toLowerCase();
+    if (satuan.includes('hari')) return time * 24 * 60 * 60 * 1000;
+    if (satuan.includes('bulan')) return time * 30 * 24 * 60 * 60 * 1000;
+    if (satuan.includes('tahun')) return time * 365 * 24 * 60 * 60 * 1000;
+    return 0; 
+}
+
+// ===== HELPER CEK DISKON & NAMA KASTA =====
+function getUserRole(user) {
+    if (!user || !user.role || user.role === "unverified") {
+        return { name: "Member 🐇", diskon: 0 };
+    }
+    
+    // Cek kalau waktu VIP-nya udah abis (Expired), otomatis balik jadi gembel
+    if (user.role_expired && Date.now() > user.role_expired) {
+        return { name: "Belum Diverifikasi ❌ (Expired)", diskon: 0 };
+    }
+
+    if (user.role === "regular") return { name: "Regular ✅", diskon: 5 }; // Diskon 5%
+    if (user.role === "vip") return { name: "VIP ✅", diskon: 15 };       // Diskon 15%
+    if (user.role === "distributor") return { name: "Distributor ✅", diskon: 30 }; // Diskon 30%
+
+    return { name: "Belum Diverifikasi ❌", diskon: 0 };
+}
+
+// ===== MESIN KALKULATOR DISKON =====
+function getDiscountPrice(userId, basePrice) {
+    const users = loadUsers();
+    const user = users.find(u => u.id === userId);
+    const roleData = getUserRole(user);
+    
+    const diskonPersen = roleData.diskon; // Dapat 0, 5, 15, atau 30
+    const potongan = Math.floor(basePrice * (diskonPersen / 100));
+    const finalPrice = basePrice - potongan;
+    
+    return {
+        roleName: roleData.name,
+        diskonPersen: diskonPersen,
+        potongan: potongan,
+        finalPrice: finalPrice
+    };
+}
+
 
 // Fungsi untuk generate random fee
 function generateRandomFee() {
@@ -153,11 +200,11 @@ async function sendSaldoPage(ctx, page = 0) {
     const totalSaldoSystem = users.reduce((sum, u) => sum + (u.balance || 0), 0);
 
     let text = `<blockquote><b>💰 DAFTAR SALDO SEMUA USER</b></blockquote>\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     text += `📊 <b>Total Saldo Sistem:</b> Rp${totalSaldoSystem.toLocaleString('id-ID')}\n`;
     text += `👥 <b>Total User:</b> ${users.length}\n`;
     text += `📄 <b>Halaman:</b> ${page + 1} / ${totalPages}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     sortedUsers.slice(start, end).forEach((u, i) => {
         const fullName = (u.first_name || "") + (u.last_name ? " " + u.last_name : "");
@@ -185,6 +232,48 @@ async function sendSaldoPage(ctx, page = 0) {
     }
 }
 
+// ===== MESIN HALAMAN KATALOG SCRIPT =====
+async function renderScriptPage(ctx, page) {
+    const scriptsList = loadScripts();
+    if (!scriptsList.length) {
+        return ctx.reply("📭 <i>Belum ada script yang dijual saat ini.</i>", { parse_mode: "HTML" }).catch(()=>{});
+    }
+
+    const ITEMS_PER_PAGE = 6;
+    const totalItems = scriptsList.length;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+
+    const startIdx = page * ITEMS_PER_PAGE;
+    const endIdx = startIdx + ITEMS_PER_PAGE;
+    const currentItems = scriptsList.slice(startIdx, endIdx);
+
+    const buttons = currentItems.map(s => [
+        {
+            text: `🗂 ${escapeHTML(s.name)} - Rp${Number(s.price).toLocaleString("id-ID")}`,
+            callback_data: `script|${s.name}`
+        }
+    ]);
+
+    // Susun Tombol Navigasi (PREV - HALAMAN - NEXT)
+    const navRow = [];
+    if (page > 0) navRow.push({ text: "⬅️ PREV", callback_data: `script_page|${page - 1}` });
+    navRow.push({ text: `Hal ${page + 1}/${totalPages}`, callback_data: "ignore" });
+    if (page < totalPages - 1) navRow.push({ text: "NEXT ➡️", callback_data: `script_page|${page + 1}` });
+
+    buttons.push(navRow);
+    buttons.push([{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog" }]);
+
+    const text = `<blockquote>📦 <b>KATALOG SCRIPT & SOURCE CODE</b></blockquote>\n\nTotal ada <b>${totalItems} Produk</b> di etalase kami.\nSilakan pilih script yang ingin dibeli:\n\n<i>*Gunakan tombol Prev/Next untuk melihat halaman lain.</i>`;
+
+    // Eksekusi Tampilan (Anti-Error Beda Media)
+    try {
+        await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+    } catch (err) {
+        // Kalau tombol diklik dari menu yang ada gambarnya, hapus dulu baru kirim teks
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.reply(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(() => {});
+    }
+}
 
 async function broadcastNewProduct(ctx, type, name, description, price, cmds) {
   const users = loadUsers();
@@ -282,45 +371,40 @@ const menuTextBot = (ctx) => {
   const userId = ctx.from?.id;
   const { totalUser, totalTransaksi, totalPemasukan } = getBotStats(db);
 
-  // Cari user di database untuk mengecek saldo
-  const user = db.find(u => u.id === userId);
-  const fromId = ctx.from.id;
-  
-  // Ambil Data User
-  const users = loadUsers();
-  const myUser = users.find(u => u.id === fromId);
-
-  // Siapkan Data Statistik & Link
+  const myUser = db.find(u => u.id === userId);
   const myRefs = myUser ? (myUser.referrals || 0) : 0;
+  const saldo = myUser ? (myUser.balance || 0) : 0;
   
-  // Ambil saldo, jika user baru/belum ada balance, jadikan 0
-  const saldo = user ? (user.balance || 0) : 0;
-  
-  // Definisi variabel profile yang sebelumnya kurang
   const fullName = firstName + (lastName ? ' ' + lastName : '');
   const userUsername = ctx.from?.username ? '@' + ctx.from.username : 'Tidak ada';
 
+  // 🔥 TANGKAP DATA KASTA USER 🔥
+  const roleData = getUserRole(myUser);
+
   return `
 <blockquote><b>🚀 AUTO ORDER KAELL</b></blockquote>
-Halo <b>${escapeHTML(firstName)} ${escapeHTML(lastName)}</b> 👋  
-Selamat datang di layanan transaksi otomatis 24/7 Jam Nonstop.
-<blockquote><b>🤖 Version Bot: 1.0</b></blockquote>
-━━━━━━━━━━━━━━━━━━━━━━
+Halo 👋 Selamat datang di layanan transaksi otomatis 24/7 Jam Nonstop.
+<blockquote><b>🔑 Status Akun: ${roleData.name}</b></blockquote>
+<blockquote><b>🤖 Version Bot: 1.5</b></blockquote>
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 <blockquote><b>🪪 PROFILE KAMU</b></blockquote>
 <b>🆔 User ID:</b> <code>${userId}</code>
 <b>📧 Username:</b> ${escapeHTML(userUsername)}
 <b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>
 <b>💳 Saldo:</b> Rp${saldo.toLocaleString("id-ID")}
 <b>👥 Refferal: </b>${myRefs} Orang
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 <blockquote><b>📊 STATISTIK BOT</b></blockquote>
 <b>🖥 Waktu Run:</b> ${runtime(process.uptime())}
 <b>👥 Total User Bot:</b> ${totalUser}
 <b>🛒 Total Transaksi:</b> ${totalTransaksi}
 <b>💰 Total Pemasukan:</b> Rp${escapeHTML(totalPemasukan.toLocaleString("id-ID"))}
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⊹ ࣪ ﹏𓊝﹏𓂁﹏⊹ ࣪ ˖⊹ ࣪ ﹏𓊝﹏𓂁﹏⊹ ࣪ ˖  🛸
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 };
+
 
 
 const textOrder = (name, price, fee) => {
@@ -329,9 +413,9 @@ const textOrder = (name, price, fee) => {
   return `
 <blockquote><b>━〔 DETAIL PEMBAYARAN QRIS 〕━</b></blockquote>
 <blockquote>🧾 <b>Informasi Pesanan</b>
-• Produk          : ${escapeHTML(name)}
-• Harga           : Rp${toRupiah(price)}
-• Biaya Layanan   : Rp${toRupiah(fee)}
+• Produk : ${escapeHTML(name)}
+• Harga : Rp${toRupiah(price)}
+• Biaya Layanan : Rp${toRupiah(fee)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━</blockquote>
 <blockquote>💳 <b>Total Pembayaran</b> : Rp${toRupiah(total)}</blockquote>
 <blockquote>⏳ <b>Batas Waktu Pembayaran</b>
@@ -520,6 +604,18 @@ function updateUserHistory(userId, orderData, details = {}) {
     }
 }
 
+  // ===== FUNGSI CEK JOIN CHANNEL =====
+async function isUserJoined(ctx) {
+    if (!config.wajibJoinChannel) return true; // Kalau config kosong, anggap lolos
+    try {
+        const member = await ctx.telegram.getChatMember(config.wajibJoinChannel, ctx.from.id);
+        return ['member', 'administrator', 'creator'].includes(member.status);
+    } catch (e) {
+        return false; // Kalau error (misal bot blm jadi admin), anggap belum join
+    }
+}
+
+
 // Fungsi untuk mengirim notifikasi ke owner saat order berhasil (HTML safe)
 async function notifyOwner(ctx, orderData, buyerInfo) {
   try {
@@ -589,14 +685,14 @@ async function notifyOwner(ctx, orderData, buyerInfo) {
 
     const notificationText = `
 <blockquote>💰 <b>ORDER BERHASIL DIPROSES!</b></blockquote>
-<blockquote>━━━━━━━━━━━━━━━━━━━━━━
+<blockquote>━━━━━━━━━━━━━━━━━━━━━━━━━━
 🕒 Waktu: ${waktu}
 📦 Produk: ${orderData.type === 'subdo' ? 'Jasa Create Subdomain' : escapeHTML(orderData.name)}
 💰 Total: Rp${toRupiah(orderData.amount)}
 👤 Buyer: ${buyerName}
 🆔 User ID: <code>${buyerInfo.id}</code>
 📱 Username: ${buyerInfo.username ? "@" + buyerUsername : "Tidak ada"}
-━━━━━━━━━━━━━━━━━━━━━━</blockquote>
+━━━━━━━━━━━━━━━━━━━━━━━━━━</blockquote>
 <blockquote>📋 Detail Produk:
 ${productDetails}
 ━━━━━━━━━━━━━━━</blockquote>
@@ -639,6 +735,54 @@ module.exports = (bot) => {
   // NOTE:
   // - InlineQuery *harus* selalu dijawab (minimal empty array), kalau tidak userbot akan kena BOT_RESPONSE_TIMEOUT.
   // - Hindari proses berat (fetch panel API) di inline query biar respons selalu cepat.
+
+
+// ===== GLOBAL MIDDLEWARE: PAGAR DEPAN FORCE SUBSCRIBE =====
+bot.use(async (ctx, next) => {
+    // 1. Biarkan Owner bebas akses tanpa harus dicek
+    if (ctx.from && String(ctx.from.id) === String(config.ownerId)) return next();
+
+    // 2. Cek apakah fitur wajib join aktif di config
+    if (config.wajibJoinChannel) {
+        
+        // Bolehkan eksekusi KHUSUS untuk tombol "Cek Verifikasi" itu sendiri
+        if (ctx.callbackQuery && ctx.callbackQuery.data === 'cek_join') {
+            return next();
+        }
+
+        const joined = await isUserJoined(ctx);
+        
+        // 3. JIKA BELUM JOIN, CEGAT SEMUA PERINTAH!
+        if (!joined) {
+            const chName = config.wajibJoinChannel.replace('@', '');
+            const textPeringatan = `🛑 <b>AKSES DITOLAK!</b>\n━━━━━━━━━━━━━━━━━━━━━━━\nUntuk menggunakan bot ini (termasuk semua menu dan tombolnya), kamu <b>WAJIB</b> bergabung ke channel resmi kami terlebih dahulu.\n\n👇 <i>Klik tombol di bawah untuk join, lalu klik Cek Verifikasi.</i>`;
+            
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '➡️ Join Channel Sekarang', url: `https://t.me/${chName}` }],
+                    [{ text: '✅ Saya Sudah Join', callback_data: 'cek_join' }]
+                ]
+            };
+
+            // Jika user nyoba ngeklik tombol/action lama
+            if (ctx.callbackQuery) {
+                await ctx.answerCbQuery('❌ Akses ditolak! Kamu harus join channel dulu!', { show_alert: true }).catch(() => {});
+                try { await ctx.deleteMessage(); } catch(e){}
+                return ctx.reply(textPeringatan, { parse_mode: 'HTML', reply_markup: keyboard });
+            } 
+            
+            // Jika user nyoba ngetik teks/command kayak /buypanel, /start, dll
+            if (ctx.message) {
+                return ctx.reply(textPeringatan, { parse_mode: 'HTML', reply_markup: keyboard });
+            }
+            
+            return; // Stop eksekusi di sini, bot bakal diam!
+        }
+    }
+    
+    // JIKA SUDAH JOIN, SILAKAN LANJUT KE PERINTAH ASLINYA
+    return next(); 
+});
 
   bot.on("inline_query", async (ctx) => {
     const body = (ctx.inlineQuery?.query || "").trim();
@@ -1060,35 +1204,78 @@ bot.action("deladmin-back", async (ctx) => {
 
     // ===== FUNGSI PROSES DEPOSIT =====
     async function processDeposit(ctx, amount, userId) {
+        // 🔥 1. EFEK LOADING ESTETIK (Deteksi Tombol vs Teks Custom) 🔥
+        let loadingMsg;
+        if (ctx.callbackQuery) {
+            await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS Deposit...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        } else {
+            loadingMsg = await ctx.reply("<blockquote><b>🔄 <i>Sedang membuat QRIS Deposit...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        }
+
+        // ⏱️ KASIH DELAY 2 DETIK
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
         const fee = generateRandomFee();
         const price = amount + fee;
-        const paymentType = config.paymentGateway;
-        const pay = await createPayment(paymentType, price, config);
 
-        orders[userId] = {
-            type: "deposit",
-            name: `Deposit Saldo Rp${amount.toLocaleString('id-ID')}`,
-            amount: price,
-            depositAmount: amount,
-            fee,
-            orderId: pay.orderId || null,
-            paymentType: paymentType,
-            chatId: ctx.chat.id,
-            expireAt: Date.now() + 6 * 60 * 1000
-        };
-
-        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
-        const qrMsg = await ctx.replyWithPhoto(photo, {
-            caption: textOrder(`Deposit Saldo`, amount, fee),
-            parse_mode: "html",
-            reply_markup: {
-                inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]]
+        // 🔥 FIX: SATPAM HARGA MINIMAL QRIS (Rp 1.000) 🔥
+        if (price < 1000) {
+            const errMsg = `<blockquote><b>❌ PEMBAYARAN DITOLAK!</b>\n\nTotal tagihan Anda (Rp${price}) terlalu kecil untuk menggunakan metode QRIS.\n\n⚠️ <i>Minimal transaksi QRIS adalah <b>Rp1.000</b>.</i></blockquote>`;
+            if (ctx.callbackQuery) {
+                return ctx.editMessageText(errMsg, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } }).catch(()=>{});
+            } else {
+                if (loadingMsg) try { await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id); } catch(e){}
+                return ctx.reply(errMsg, { parse_mode: "HTML" }).catch(()=>{});
             }
-        });
+        }
 
-        orders[userId].qrMessageId = qrMsg.message_id;
-        startCheck(userId, ctx);
+        const paymentType = config.paymentGateway;
+
+        try {
+            const pay = await createPayment(paymentType, price, config);
+
+            orders[userId] = {
+                type: "deposit",
+                name: `Deposit Saldo Rp${amount.toLocaleString('id-ID')}`,
+                amount: price,
+                depositAmount: amount,
+                fee,
+                orderId: pay.orderId || null,
+                paymentType: paymentType,
+                chatId: ctx.chat.id,
+                expireAt: Date.now() + 6 * 60 * 1000
+            };
+
+            const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+            
+            // 🔥 2. HAPUS LOADING & MUNCULKAN QRIS 🔥
+            if (ctx.callbackQuery) {
+                try { await ctx.deleteMessage(); } catch (e) {}
+            } else {
+                if (loadingMsg) try { await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id); } catch(e){}
+            }
+
+            const qrMsg = await ctx.replyWithPhoto(photo, {
+                caption: textOrder(`Deposit Saldo`, amount, fee),
+                parse_mode: "html",
+                reply_markup: {
+                    inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]]
+                }
+            });
+
+            orders[userId].qrMessageId = qrMsg.message_id;
+            startCheck(userId, ctx);
+        } catch (err) {
+            const errorTxt = `❌ <b>Sistem Pembayaran Gangguan!</b>\n\nError: <code>${err.message}</code>\nSilakan coba lagi nanti.`;
+            if (ctx.callbackQuery) {
+                await ctx.editMessageText(errorTxt, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "❌ Batalkan", callback_data: "cancel_order"}]]} }).catch(()=>{});
+            } else {
+                if (loadingMsg) try { await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id); } catch(e){}
+                await ctx.reply(errorTxt, { parse_mode: "HTML" }).catch(()=>{});
+            }
+        }
     }
+
 
     // ===== MENU DEPOSIT (TOMBOL INTERAKTIF) =====
     bot.action("deposit_menu", async (ctx) => {
@@ -1144,10 +1331,11 @@ bot.action("deladmin-back", async (ctx) => {
 
 bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-    try { await ctx.deleteMessage(); } catch (e) { return; } // Anti Spam
+    // Kita hapus try { await ctx.deleteMessage(); } biar pesannya bisa di-edit sama efek Loading di atas
     const amount = parseInt(ctx.match[1]);
     return processDeposit(ctx, amount, ctx.from.id);
 });
+
 
     // Handle tombol custom
     bot.action("deposit_custom", async (ctx) => {
@@ -1235,15 +1423,11 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
             }
         }
         
-        // ==========================================
-        // ===== FULL LOGIKA TEXT INPUT SMM =========
-        // ==========================================
-
         // 1. TANGKAP PENCARIAN LAYANAN
         if (pendingSmmSearch[fromId]) {
             delete pendingSmmSearch[fromId];
             const keyword = body.toLowerCase();
-            const waitMsg = await ctx.reply("⏳ <i>Sedang mencari layanan di server pusat...</i>", { parse_mode: "HTML" });
+            const waitMsg = await ctx.reply("⏳ <i>Sedang mencari layanan...</i>", { parse_mode: "HTML" });
 
             try {
                 const params = new URLSearchParams();
@@ -1252,38 +1436,43 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
 
                 const res = await axios.post(`${config.smm.baseUrl}/services`, params);
                 
-                // 🔥 KODE BUKA KEDOK ERROR 🔥
-                if (res.data.status === false || !res.data.data) {
-                    const pesanPusat = res.data.data || res.data.message || "Akses ditolak";
-                    return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, 
-                        `❌ <b>FAYUPEDIA MENOLAK AKSES!</b>\n\nAlasan dari Pusat:\n<code>${escapeHTML(String(pesanPusat))}</code>\n\n<i>*Pastikan API Key benar dan IP Server sudah di-whitelist!</i>`, 
-                        { parse_mode: "HTML" }
-                    );
+                let rawData = res.data;
+                if (typeof rawData === 'string') { try { rawData = JSON.parse(rawData); } catch(e){} }
+
+                let services = [];
+                // 🔥 X-RAY CEK STRUKTUR ASLI SERVER 🔥
+                if (Array.isArray(rawData)) services = rawData;
+                else if (rawData.data && Array.isArray(rawData.data)) services = rawData.data;
+                else if (rawData.services && Array.isArray(rawData.services)) services = rawData.services;
+                else {
+                    // JIKA BUKAN DAFTAR LAYANAN, BONGKAR ISI ASLI PESAN SERVER:
+                    throw new Error(`JAWABAN ASLI FAYUPEDIA:\n${JSON.stringify(rawData, null, 2)}`);
                 }
 
-                const services = res.data.data;
-                const filtered = services.filter(s => s.name.toLowerCase().includes(keyword) || s.category.toLowerCase().includes(keyword));
+                const filtered = services.filter(s => {
+                    if (!s || typeof s !== 'object') return false;
+                    const namaNya = s.name || s.nama || s.layanan || s.title || "";
+                    const catNya = s.category || s.kategori || s.brand || "";
+                    return String(namaNya).toLowerCase().includes(keyword) || String(catNya).toLowerCase().includes(keyword);
+                });
                 
-                if (filtered.length === 0) {
-                    return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Tidak ditemukan layanan untuk kata kunci: <b>${escapeHTML(keyword)}</b>`, { parse_mode: "HTML" });
-                }
+                if (filtered.length === 0) return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Tidak ditemukan layanan: <b>${escapeHTML(keyword)}</b>`, { parse_mode: "HTML" });
 
                 const topResults = filtered.slice(0, 10);
                 smmTempData[fromId] = topResults;
 
                 const buttons = topResults.map((s, index) => {
-                    const hargaMarkup = Math.ceil(s.price * config.smm.profitMargin);
-                    return [{ text: `${s.name.substring(0, 40)}... | Rp${hargaMarkup.toLocaleString('id-ID')}`, callback_data: `smm_select|${index}` }];
+                    const basePrice = Number(s.rate || s.price || s.harga || 0);
+                    const hargaMarkup = Math.ceil(basePrice * config.smm.profitMargin);
+                    const namaNya = s.name || s.nama || s.layanan || "Layanan";
+                    return [{ text: `${String(namaNya).substring(0, 35)}... | Rp${hargaMarkup.toLocaleString('id-ID')}`, callback_data: `smm_select|${index}` }];
                 });
                 buttons.push([{ text: "🔍 Cari Ulang", callback_data: "smm_search" }, { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "smm_menu" }]);
 
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, 
-                    `<blockquote>✅ <b>Ditemukan ${filtered.length} Layanan untuk "${escapeHTML(keyword)}"</b></blockquote>\n\nMenampilkan 10 hasil teratas:\n\n<i>*Harga yang tertera adalah per 1.000 (1K).</i>`, 
-                    { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }
-                );
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `<blockquote>✅ <b>Ditemukan ${filtered.length} Layanan</b></blockquote>\n\nMenampilkan 10 hasil teratas:`, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
             } catch (err) {
-                // Tampilkan error HTTP kalau website Fayupedia down/404
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Terjadi kesalahan HTTP:\n<code>${err.message}</code>`);
+                const detailErr = err.response ? JSON.stringify(err.response.data) : err.message;
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ <b>DEBUG SERVER:</b>\n<code>${detailErr}</code>`, { parse_mode: "HTML" });
             }
             return;
         }
@@ -1294,63 +1483,116 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
             const orderState = pendingSmmOrder[fromId];
             
             if (orderState.step === "target") {
-                orderState.target = text;
+                orderState.target = body; 
                 orderState.step = "quantity";
-                return ctx.reply(`✅ Target disimpan: <code>${escapeHTML(text)}</code>\n\n👇 <b>Sekarang balas pesan ini dengan memasukkan JUMLAH (Quantity):</b>\n<i>(Min: ${orderState.service.min}, Max: ${orderState.service.max})</i>`, { parse_mode: "HTML" });
+                return ctx.reply(`✅ Target disimpan: <code>${escapeHTML(body)}</code>\n\n👇 <b>Sekarang balas pesan ini dengan memasukkan JUMLAH (Quantity):</b>\n<i>(Min: ${orderState.service.min}, Max: ${orderState.service.max})</i>`, { parse_mode: "HTML" });
             }
             
             if (orderState.step === "quantity") {
-                const quantity = parseInt(text.replace(/[^0-9]/g, ''));
-                if (isNaN(quantity) || quantity < orderState.service.min || quantity > orderState.service.max) {
-                    return ctx.reply(`❌ Jumlah tidak valid! Masukkan angka antara ${orderState.service.min} sampai ${orderState.service.max}.`);
+                const quantity = parseInt(body.replace(/[^0-9]/g, '')); 
+                const minQty = Number(orderState.service.min || 0);
+                const maxQty = Number(orderState.service.max || 0);
+
+                if (isNaN(quantity) || quantity < minQty || quantity > maxQty) {
+                    return ctx.reply(`❌ Jumlah tidak valid! Masukkan angka antara ${minQty} sampai ${maxQty}.`);
                 }
                 
                 delete pendingSmmOrder[fromId];
-                const hargaAsli = (orderState.service.price / 1000) * quantity;
-                const hargaJual = Math.ceil(hargaAsli * config.smm.profitMargin);
                 
+                // Kalkulasi harga awal
+                const hargaAsli = Number(orderState.service.rate || orderState.service.price || orderState.service.harga || 0);
+                const totalHargaAsli = (hargaAsli / 1000) * quantity;
+                const hargaJual = Math.ceil(totalHargaAsli * config.smm.profitMargin);
+                const namaNya = orderState.service.name || orderState.service.nama || orderState.service.layanan || "Layanan";
+                
+                // 🔥 MESIN DISKON SMM BEKERJA 🔥
+                const harga = getDiscountPrice(fromId, hargaJual);
+
+                // Simpan harga final (yang udah didiskon) ke sesi order
                 smmTempOrder[fromId] = {
-                    serviceId: orderState.service.id,
-                    serviceName: orderState.service.name,
+                    serviceId: orderState.service.service || orderState.service.id, 
+                    serviceName: namaNya,
                     target: orderState.target,
                     quantity: quantity,
-                    price: hargaJual
+                    price: harga.finalPrice
                 };
                 
-                const confirmText = `<blockquote>🛒 <b>KONFIRMASI ORDER SMM</b></blockquote>\n\n📦 <b>Layanan:</b> ${escapeHTML(orderState.service.name)}\n🔗 <b>Target:</b> ${escapeHTML(orderState.target)}\n📈 <b>Jumlah:</b> ${quantity.toLocaleString('id-ID')}\n💰 <b>Total Tagihan:</b> Rp${hargaJual.toLocaleString('id-ID')}\n\nPilih metode pembayaran di bawah ini:`;
-                return ctx.reply(confirmText, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "💰 Bayar via Saldo", callback_data: `smm_pay_saldo` }], [{ text: "📷 Bayar via QRIS", callback_data: `smm_pay_qris` }], [{ text: "❌ Batal", callback_data: "smm_menu" }]] } });
+                let teksHarga = `💰 <b>Total Tagihan:</b> Rp${hargaJual.toLocaleString('id-ID')}`;
+                if (harga.diskonPersen > 0) {
+                    teksHarga = `💰 <b>Harga Normal:</b> <s>Rp${hargaJual.toLocaleString('id-ID')}</s>\n🏷 <b>Diskon ${harga.roleName} (${harga.diskonPersen}%):</b> -Rp${harga.potongan.toLocaleString('id-ID')}\n💳 <b>Harga Akhir: Rp${harga.finalPrice.toLocaleString('id-ID')}</b>`;
+                }
+
+                const confirmText = `<blockquote>🛒 <b>KONFIRMASI ORDER SMM</b></blockquote>\n\n📦 <b>Layanan:</b> ${escapeHTML(namaNya)}\n🔗 <b>Target:</b> ${escapeHTML(orderState.target)}\n📈 <b>Jumlah:</b> ${quantity.toLocaleString('id-ID')}\n${teksHarga}\n\nPilih metode pembayaran di bawah ini:`;
+                return ctx.reply(confirmText, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "💰 Bayar via Saldo", callback_data: `smm_pay_saldo` }], [{ text: "📷 Bayar via QRIS", callback_data: `smm_pay_qris` }], [{ text: "❌ Batal", callback_data: "smm_categories" }]] } });
             }
             return;
         }
 
+
+
         // 3. TANGKAP INPUT CEK STATUS
         if (pendingSmmStatus[fromId]) {
             delete pendingSmmStatus[fromId];
-            const orderId = text.replace(/[^0-9]/g, '');
-            if (!orderId) return ctx.reply("❌ Order ID tidak valid! Harus berupa angka.");
+            // 🔥 FIX: Pakai 'body' bukan 'text' biar angka 1 kata kebaca!
+            const orderId = body.replace(/[^0-9]/g, '');
+            if (!orderId) return ctx.reply("❌ Order ID tidak valid!");
 
             const waitMsg = await ctx.reply("⏳ <i>Mengecek status pesanan...</i>", {parse_mode: "HTML"});
             try {
                 const params = new URLSearchParams();
                 params.append('api_id', config.smm.apiId);
                 params.append('api_key', config.smm.apiKey);
-                params.append('id', orderId); // Parameter untuk Fayupedia
+                params.append('action', 'status'); // 🔥 Wajib standar SMM
+                params.append('id', orderId);
 
-                const res = await axios.post(`${config.smm.baseUrl}/status`, params);
-                if (!res.data || res.data.status === false) throw new Error(res.data.data || "Pesanan tidak ditemukan.");
+                let res;
+                try {
+                    res = await axios.post(config.smm.baseUrl, params);
+                } catch (e) {
+                    res = await axios.post(`${config.smm.baseUrl}/status`, params);
+                }
 
-                const data = res.data.data;
-                let statusText = data.status === "Pending" ? "⏳ Pending" :
-                                 data.status === "Processing" ? "🔄 Processing" :
-                                 data.status === "Success" ? "✅ Success" :
-                                 data.status === "Completed" ? "✅ Completed" :
-                                 data.status === "Partial" ? "⚠️ Partial" :
-                                 data.status === "Canceled" ? "❌ Canceled" : data.status;
+                const data = res.data.data ? res.data.data : res.data;
+                if (data.error || res.data.status === false) throw new Error(data.error || "ID tidak ditemukan di server pusat");
 
-                const msg = `<blockquote>📦 <b>STATUS PESANAN SMM</b></blockquote>\n\n🧾 <b>Order ID:</b> <code>${orderId}</code>\n📊 <b>Status:</b> ${statusText}\n📈 <b>Start Count:</b> ${data.start_count || 0}\n📉 <b>Remains:</b> ${data.remains || 0}\n\n<i>*Jika status Canceled/Partial, segera lapor ke admin untuk pengembalian dana (refund).</i>`;
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, msg, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
+                const statAsli = (data.status || data.order_status || "UNKNOWN").toString().toUpperCase();
+                
+                let ikonStatus = "⏳";
+                if (statAsli === "SUCCESS" || statAsli === "COMPLETED") ikonStatus = "✅";
+                if (statAsli === "ERROR" || statAsli === "CANCELED" || statAsli === "PARTIAL") ikonStatus = "❌";
+                if (statAsli === "PROCESSING" || statAsli === "IN PROGRESS" || statAsli === "PENDING") ikonStatus = "🔄";
+
+                // 🔥 INTELIJEN DATABASE: BIKIN UI MIRIP FAYUPEDIA 🔥
+                const users = loadUsers();
+                const user = users.find(u => u.id === fromId);
+                let layananTeks = "SMM Service";
+                let targetTeks = "Tersembunyi (Privacy)";
+                let qtyTeks = "-";
+
+                if (user && user.history) {
+                    const historyItem = user.history.find(h => h.type === "smm" && h.details && h.details.includes(`OrderID: ${orderId}`));
+                    if (historyItem) {
+                        layananTeks = historyItem.product.replace("SMM: ", "");
+                        const matchTarget = historyItem.details.match(/Target:\s(.*?)\s\|/);
+                        if (matchTarget) targetTeks = matchTarget[1];
+                        const matchQty = historyItem.details.match(/Qty:\s(\d+)\s\|/);
+                        if (matchQty) qtyTeks = matchQty[1];
+                    }
+                }
+
+                const textStatus = `<blockquote><b>${ikonStatus} DETAIL PESANAN #${orderId}</b></blockquote>\n` +
+                                   `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                                   `📦 <b>Layanan:</b>\n${escapeHTML(layananTeks)}\n\n` +
+                                   `🔗 <b>Target:</b>\n<code>${escapeHTML(targetTeks)}</code>\n\n` +
+                                   `📈 <b>Jumlah Pesan:</b> ${qtyTeks}\n` +
+                                   `📉 <b>Sisa (Remains):</b> ${data.remains || 0}\n` +
+                                   `📊 <b>Jumlah Awal:</b> ${data.start_count || 0}\n` +
+                                   `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                                   `📌 <b>Status:</b> <b>${statAsli}</b>`;
+
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, textStatus, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
             } catch (err) {
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengecek status: ${err.message}`);
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengecek status:\n<code>${err.message}</code>`, { parse_mode: "HTML" });
             }
             return;
         }
@@ -1358,10 +1600,11 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
         // 4. TANGKAP INPUT REFILL
         if (pendingSmmRefill[fromId]) {
             delete pendingSmmRefill[fromId];
-            const orderId = text.replace(/[^0-9]/g, '');
+            // 🔥 FIX: Pakai 'body' bukan 'text'
+            const orderId = body.replace(/[^0-9]/g, '');
             if (!orderId) return ctx.reply("❌ Order ID tidak valid!");
 
-            const waitMsg = await ctx.reply("⏳ <i>Mengirim permintaan refill ke pusat...</i>", {parse_mode: "HTML"});
+            const waitMsg = await ctx.reply("⏳ <i>Mengirim permintaan refill...</i>", {parse_mode: "HTML"});
             try {
                 const params = new URLSearchParams();
                 params.append('api_id', config.smm.apiId);
@@ -1369,14 +1612,16 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
                 params.append('id', orderId);
 
                 const res = await axios.post(`${config.smm.baseUrl}/refill`, params);
-                if (!res.data || res.data.status === false) throw new Error(res.data.data || "Pesanan belum memenuhi syarat refill.");
+                if (res.data.error) throw new Error(res.data.error);
 
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `<blockquote>🔄 <b>PERMINTAAN REFILL SUKSES</b></blockquote>\n\n🧾 <b>Order ID:</b> <code>${orderId}</code>\n✅ Permintaan refill telah diteruskan ke server pusat.`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `<blockquote>🔄 <b>PERMINTAAN REFILL SUKSES</b></blockquote>\n\n🧾 <b>Order ID:</b> <code>${orderId}</code>\n🔖 <b>Refill ID:</b> <code>${res.data.refill || "-"}</code>\n✅ Permintaan refill telah diteruskan.`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
             } catch (err) {
-                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal request refill:\n<code>${err.message}</code>`);
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal request refill:\n<code>${err.message}</code>`, { parse_mode: "HTML" });
             }
             return;
         }
+
+
         
                 // ===== TANGKAP KONFIRMASI DELETE ALL SALDO =====
         if (pendingDeleteAllSaldo[fromId]) {
@@ -1406,13 +1651,13 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
 
                 const resetText = `
 <blockquote><b>✅ SEMUA SALDO USER BERHASIL DIHAPUS!</b></blockquote>
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 Proses <i>reset</i> saldo (Sapu Jagat) telah selesai dilakukan.
 
 📊 <b>Statistik Reset:</b>
 👥 Total User Direset: <b>${totalUserDireset} Orang</b>
 💰 Total Saldo Dihanguskan: <b>Rp${totalSaldoDihapus.toLocaleString('id-ID')}</b>
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 `.trim();
                 return ctx.reply(resetText, { parse_mode: "HTML" });
             }
@@ -1463,6 +1708,37 @@ Proses <i>reset</i> saldo (Sapu Jagat) telah selesai dilakukan.
                 ctx.reply("❌ <i>Gagal mengirim pesan ke Admin.</i>", { parse_mode: "HTML" });
             }
             return; // Stop di sini
+        }
+        
+                // 5. TANGKAP INPUT CEK STATUS REFILL
+        if (pendingSmmRefillStatus[fromId]) {
+            delete pendingSmmRefillStatus[fromId];
+            const refillId = body.replace(/[^0-9]/g, '');
+            if (!refillId) return ctx.reply("❌ Refill ID tidak valid!");
+
+            const waitMsg = await ctx.reply("⏳ <i>Mengecek status refill...</i>", {parse_mode: "HTML"});
+            try {
+                const params = new URLSearchParams();
+                params.append('api_id', config.smm.apiId);
+                params.append('api_key', config.smm.apiKey);
+                params.append('id', refillId); // Sesuai dokumentasi PHP lu pakai ID Refill
+
+                const res = await axios.post(`${config.smm.baseUrl}/refill/status`, params);
+                
+                let rawData = res.data;
+                if (typeof rawData === 'string') { try { rawData = JSON.parse(rawData); } catch(e){} }
+                if (rawData.error) throw new Error(rawData.error);
+
+                const data = rawData.data || rawData;
+                const statusText = data.refill_status || data.status || "Unknown";
+
+                const msg = `<blockquote>🔄 <b>STATUS REFILL SMM</b></blockquote>\n\n🔖 <b>Refill ID:</b> <code>${refillId}</code>\n📊 <b>Status:</b> ${statusText}\n\n<i>*Mohon tunggu, proses refill biasanya memakan waktu 1-3 hari.</i>`;
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, msg, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } });
+            } catch (err) {
+                const detailErr = err.response ? JSON.stringify(err.response.data) : err.message;
+                await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengecek status refill:\n<code>${detailErr}</code>`, { parse_mode: "HTML" });
+            }
+            return;
         }
 
 
@@ -1606,6 +1882,72 @@ case "redeem": {
     return ctx.reply(`🎉 <b>SELAMAT!</b>\n\nKamu berhasil menukarkan kode voucher <code>${kode}</code>.\n💰 Saldo bertambah Rp${voucher.nominal.toLocaleString('id-ID')}\n💳 Saldo sekarang: Rp${users[userIndex].balance.toLocaleString('id-ID')}`, { parse_mode: "HTML" });
 }
 
+// ===== FITUR UPGRADE KASTA USER =====
+case "addregular":
+case "addvip":
+case "adddistro":
+case "adddistributor": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    
+    const targetId = args[0];
+    const angka = args[1];
+    const satuan = args[2];
+    
+    if (!targetId || !angka || !satuan) {
+        return ctx.reply(`❌ Format salah!\nContoh: ${config.prefix}${command} 1402991119 30 hari\nSatuan yang didukung: hari, bulan, tahun`);
+    }
+
+    const durationMs = parseTimeToMs(angka, satuan);
+    if (durationMs === 0) return ctx.reply("❌ Format waktu tidak valid! Gunakan: hari / bulan / tahun");
+
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id == targetId);
+    if (userIndex === -1) return ctx.reply("❌ User tidak ditemukan di database!");
+
+    let roleName = "Regular";
+    let roleKey = "regular";
+    if (command.includes("vip")) { roleName = "VIP"; roleKey = "vip"; }
+    if (command.includes("distro") || command.includes("distributor")) { roleName = "Distributor"; roleKey = "distributor"; }
+
+    users[userIndex].role = roleKey;
+    users[userIndex].role_expired = Date.now() + durationMs;
+    saveUsers(users);
+
+    const expDate = new Date(users[userIndex].role_expired).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    ctx.reply(`✅ <b>Berhasil Upgrade Akun!</b>\n\n🆔 ID: <code>${targetId}</code>\n🔰 Pangkat: <b>${roleName} ✅</b>\n⏳ Expired: ${expDate}`, { parse_mode: "HTML" });
+    
+    // Kirim notifikasi otomatis ke target
+    ctx.telegram.sendMessage(targetId, `🎉 <b>SELAMAT! AKUN KAMU TELAH DI-UPGRADE!</b>\n\n🔰 Pangkat Baru: <b>${roleName} ✅</b>\n⏳ Berlaku Sampai: ${expDate}\n\n<i>Nikmati diskon eksklusif untuk setiap transaksi layanan di bot kami!</i>`, { parse_mode: "HTML" }).catch(()=>{});
+    break;
+}
+
+// ===== FITUR CABUT PANGKAT USER =====
+case "delrole":
+case "delvip":
+case "delregular":
+case "deldistro": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+    
+    const targetId = args[0];
+    if (!targetId) return ctx.reply(`❌ Format salah!\nContoh: ${config.prefix}delrole 1402991119`);
+
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id == targetId);
+    if (userIndex === -1) return ctx.reply("❌ User tidak ditemukan di database!");
+
+    users[userIndex].role = "unverified";
+    users[userIndex].role_expired = null;
+    saveUsers(users);
+
+    ctx.reply(`✅ <b>Pangkat Berhasil Dicabut!</b>\nAkun <code>${targetId}</code> telah kembali menjadi Belum Diverifikasi ❌.`, { parse_mode: "HTML" });
+    
+    // Kasih tau orangnya kalau pangkatnya udah dicabut
+    ctx.telegram.sendMessage(targetId, `⚠️ <b>INFORMASI AKUN</b>\n\nMasa aktif pangkat kamu telah berakhir atau dicabut oleh Admin. Akun kamu kembali menjadi <b>Belum Diverifikasi ❌</b>. Harga produk kembali normal.`, { parse_mode: "HTML" }).catch(()=>{});
+    break;
+}
+
+
 case "ref":
 case "referral": {
     const botUser = await ctx.telegram.getMe();
@@ -1740,7 +2082,7 @@ case "profile": {
 
     const profileText = `
 <blockquote><b>🪪 Profile Kamu</b>
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 <b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>
 <b>👤 Nama Depan:</b> <code>${escapeHTML(firstName)}</code>
 <b>👥 Nama Belakang:</b> <code>${escapeHTML(lastName)}</code>
@@ -1749,7 +2091,7 @@ case "profile": {
 <b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}
 <b>💰 Total Spent:</b> Rp${toRupiah(user.total_spent || 0)}
 <b>📊 Total Transaksi:</b> ${user.history ? user.history.length : 0}
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 <b>📋 Last 3 Transactions:</b>\n
 ${lastTransactions}</blockquote>
     `.trim();
@@ -2373,7 +2715,7 @@ case "delallsaldo": {
 
     const confirmText = `
 ⚠️ <b>PERINGATAN BAHAYA (SAPU JAGAT)</b> ⚠️
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 Apakah Anda yakin ingin <b>MENGHAPUS SEMUA SALDO USER</b> menjadi Rp0?
 Tindakan ini tidak dapat dibatalkan dan uang user akan hangus!
 
@@ -2535,7 +2877,7 @@ bot.action(/^prompt\|(.+)/, async (ctx) => {
     
     if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
 
-    const text = `<blockquote><b>📝 Konfirmasi Pemesanan</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n💰 Harga: Rp${Number(sc.price).toLocaleString("id-ID")}\n━━━━━━━━━━━━━━━━━━━━━━\n<blockquote><b>📝 Deskripsi:</b></blockquote>\n${escapeHTML(sc.desk || "-")}\n━━━━━━━━━━━━━━━━━━━━━━\n⚠️ Yakin ingin melanjutkan pembayaran?`.trim();
+    const text = `<blockquote><b>📝 Konfirmasi Pemesanan</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n💰 Harga: Rp${Number(sc.price).toLocaleString("id-ID")}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n<blockquote><b>📝 Deskripsi:</b></blockquote>\n${escapeHTML(sc.desk || "-")}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚠️ Yakin ingin melanjutkan pembayaran?`.trim();
 
     await ctx.editMessageText(text, {
         parse_mode: "HTML",
@@ -2558,78 +2900,114 @@ bot.action("back_to_prompt", async (ctx) => {
     await ctx.editMessageText("Pilih Prompt yang ingin dibeli:", { parse_mode: "HTML", reply_markup: { inline_keyboard: promptButtons } });
 });
 
-bot.action(/confirm_prompt\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    const name = ctx.match[1];
-    const userId = ctx.from.id;
-    const prompts = loadPrompts();
-    const sc = prompts.find(s => s.name === name);
-    if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
+    // ===== OPSI PEMBAYARAN PROMPT (DENGAN DISKON) =====
+    bot.action(/confirm_prompt\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        const name = ctx.match[1];
+        const userId = ctx.from.id;
+        const prompts = loadPrompts();
+        const sc = prompts.find(s => s.name === name);
+        if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
 
-    const users = loadUsers();
-    const user = users.find(u => u.id === userId);
-    const saldo = user ? (user.balance || 0) : 0;
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, sc.price);
+        const users = loadUsers();
+        const user = users.find(u => u.id === userId);
+        const saldo = user ? (user.balance || 0) : 0;
 
-    return ctx.editMessageText(
-        `🛒 <b>Pilih Metode Pembayaran</b>\n\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n💰 Harga: Rp${sc.price.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
-        { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_prompt|${sc.name}` }], [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_prompt|${sc.name}` }], [{ text: "❌ Batalkan", callback_data: "back_to_prompt" }]] } }
-    );
-});
+        let teksHarga = `💰 <b>Harga Normal:</b> Rp${sc.price.toLocaleString('id-ID')}`;
+        if (harga.diskonPersen > 0) {
+            teksHarga = `💰 <b>Harga Normal:</b> <s>Rp${sc.price.toLocaleString('id-ID')}</s>\n🏷 <b>Diskon ${harga.roleName} (${harga.diskonPersen}%):</b> -Rp${harga.potongan.toLocaleString('id-ID')}\n💳 <b>Harga Akhir: Rp${harga.finalPrice.toLocaleString('id-ID')}</b>`;
+        }
 
-bot.action(/pay_saldo_prompt\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    try { await ctx.deleteMessage(); } catch (e) { return; }
-    const name = ctx.match[1];
-    const userId = ctx.from.id;
-    const prompts = loadPrompts();
-    const sc = prompts.find(s => s.name === name);
-    if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
+        return ctx.editMessageText(
+            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n${teksHarga}\n\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+            { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: `💰 Bayar via Saldo (Rp${harga.finalPrice.toLocaleString('id-ID')})`, callback_data: `pay_saldo_prompt|${sc.name}` }], [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_prompt|${sc.name}` }], [{ text: "❌ Batalkan", callback_data: "back_to_prompt" }]] } }
+        );
+    });
 
-    const users = loadUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-    
-    users[userIndex].balance = users[userIndex].balance || 0;
-    
-    if (users[userIndex].balance < sc.price) return ctx.reply("❌ Saldo tidak cukup!");
+    // ===== BAYAR PROMPT VIA QRIS =====
+    bot.action(/pay_qris_prompt\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS Prompt...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-    users[userIndex].balance -= sc.price;
-    users[userIndex].total_spent = (users[userIndex].total_spent || 0) + sc.price;
-    users[userIndex].history = users[userIndex].history || [];
-    users[userIndex].history.push({ product: `Prompt: ${sc.name}`, amount: sc.price, type: "prompt", details: sc.desk || "-", timestamp: new Date().toISOString() });
-    saveUsers(users);
+        const name = ctx.match[1];
+        const userId = ctx.from.id;
+        const prompts = loadPrompts();
+        const sc = prompts.find(s => s.name === name);
+        if (!sc) return ctx.editMessageText("❌ Prompt tidak ditemukan.", { parse_mode: "HTML" }).catch(()=>{});
 
-    const buyerInfo = { id: userId, name: ctx.from.first_name, username: ctx.from.username, totalSpent: users[userIndex].total_spent };
-    await notifyOwner(ctx, { type: "prompt", name: sc.name, amount: sc.price, description: sc.desk }, buyerInfo);
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, sc.price);
+        const fee = generateRandomFee();
+        const price = harga.finalPrice + fee;
+        
+        if (price < 1000) {
+            return ctx.editMessageText(`<blockquote><b>❌ PEMBAYARAN DITOLAK!</b>\nMinimal transaksi QRIS adalah <b>Rp1.000</b>. Silakan gunakan metode <b>Bayar via Saldo</b>.</blockquote>`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } }).catch(()=>{});
+        }
 
-    await ctx.reply(`<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n💰 Harga: Rp${sc.price.toLocaleString('id-ID')}\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>File Prompt sedang dikirim...</i>`, { parse_mode: "html" });
-    
-    try {
-        await ctx.telegram.sendDocument(ctx.chat.id, { source: sc.file }, { caption: `📄 Prompt: ${escapeHTML(sc.name)}`, parse_mode: "html" });
-    } catch (err) {
-        await ctx.reply("❌ Gagal mengirim file prompt. Silakan hubungi admin.");
-    }
-});
+        const paymentType = config.paymentGateway;
+        try {
+            const pay = await createPayment(paymentType, price, config);
+            if (!pay || !pay.qris) throw new Error("Gagal membuat QRIS");
 
-bot.action(/pay_qris_prompt\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    try { await ctx.deleteMessage(); } catch (e) { return; }
-    const name = ctx.match[1];
-    const userId = ctx.from.id;
-    const prompts = loadPrompts();
-    const sc = prompts.find(s => s.name === name);
-    if (!sc) return ctx.reply("❌ Prompt tidak ditemukan.");
+            orders[userId] = { type: "prompt", name: sc.name, amount: price, fee, file: sc.file, orderId: pay.orderId || null, paymentType: paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+            const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+            try { await ctx.deleteMessage(); } catch (e) {}
+            
+            let infoDiskon = harga.potongan > 0 ? `\n• Diskon Kasta    : -Rp${harga.potongan.toLocaleString('id-ID')}` : "";
+            const captionStruk = `<blockquote><b>━〔 DETAIL PEMBAYARAN QRIS 〕━</b></blockquote>\n<blockquote>🧾 <b>Informasi Pesanan</b>\n• Produk          : Prompt ${escapeHTML(sc.name)}\n• Harga Normal    : Rp${sc.price.toLocaleString('id-ID')}${infoDiskon}\n• Biaya Layanan   : Rp${fee.toLocaleString('id-ID')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━</blockquote>\n<blockquote>💳 <b>Total Tagihan</b> : Rp${price.toLocaleString('id-ID')}</blockquote>\n<blockquote>⏳ <b>Batas Waktu:</b> 6 Menit.</blockquote>`;
 
-    const fee = generateRandomFee();
-    const price = sc.price + fee;
-    const paymentType = config.paymentGateway;
-    const pay = await createPayment(paymentType, price, config);
+            const qrMsg = await ctx.replyWithPhoto(photo, { caption: captionStruk, parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+            orders[userId].qrMessageId = qrMsg.message_id;
+            startCheck(userId, ctx);
+        } catch (err) {
+            await ctx.editMessageText(`❌ Gangguan:\n<code>${err.message}</code>`, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "❌ Batalkan", callback_data: "cancel_order"}]]} }).catch(()=>{});
+        }
+    });
 
-    orders[userId] = { type: "prompt", name: sc.name, amount: price, fee, file: sc.file, orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
-    const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
-    const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(sc.name, sc.price, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
-    orders[userId].qrMessageId = qrMsg.message_id;
-    startCheck(userId, ctx);
-});
+    // ===== BAYAR PROMPT VIA SALDO =====
+    bot.action(/pay_saldo_prompt\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        await ctx.editMessageText("<blockquote><b>⏳ <i>Sedang memastikan saldo & menyiapkan file Prompt...</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const name = ctx.match[1];
+        const userId = ctx.from.id;
+        const prompts = loadPrompts();
+        const sc = prompts.find(s => s.name === name);
+        if (!sc) return ctx.editMessageText("❌ Prompt tidak ditemukan.", { parse_mode: "HTML" }).catch(()=>{});
+
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, sc.price);
+        const price = harga.finalPrice;
+
+        const users = loadUsers();
+        const userIndex = users.findIndex(u => u.id === userId);
+        users[userIndex].balance = users[userIndex].balance || 0;
+        
+        if (users[userIndex].balance < price) {
+            return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Final: Rp${price.toLocaleString('id-ID')}`, { parse_mode: "HTML" }).catch(()=>{});
+        }
+
+        users[userIndex].balance -= price;
+        users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
+        users[userIndex].history = users[userIndex].history || [];
+        users[userIndex].history.push({ product: `Prompt: ${sc.name}`, amount: price, type: "prompt", details: sc.desk || "-", timestamp: new Date().toISOString() });
+        saveUsers(users);
+
+        const buyerInfo = { id: userId, name: ctx.from.first_name, username: ctx.from.username, totalSpent: users[userIndex].total_spent };
+        await notifyOwner(ctx, { type: "prompt", name: sc.name, amount: price, description: sc.desk }, buyerInfo);
+
+        await ctx.editMessageText(`<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n📄 Produk: Prompt ${escapeHTML(sc.name)}\n💰 Harga Dibayar: Rp${price.toLocaleString('id-ID')} <i>(Diskon ${harga.diskonPersen}%)</i>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>File Prompt sedang dikirim...</i>`, { parse_mode: "html" }).catch(()=>{});
+        
+        try {
+            await ctx.telegram.sendDocument(ctx.chat.id, { source: sc.file }, { caption: `📄 Prompt: ${escapeHTML(sc.name)}`, parse_mode: "html" });
+        } catch (err) {
+            await ctx.telegram.sendMessage(ctx.chat.id, "❌ Gagal mengirim file prompt. Silakan hubungi admin.");
+        }
+    });
 
 bot.action(/getprompt_detail\|(\d+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
@@ -2682,43 +3060,26 @@ bot.action(/del_prompt\|(.+)/, async (ctx) => {
     return ctx.editMessageText(`✅ Prompt <b>${escapeHTML(name)}</b> berhasil dihapus.`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Kembali ke List", callback_data: "back_to_prompt_list" }]] } });
 });
 
-
+// ===== TOMBOL BUKA MENU SCRIPT =====
 bot.action("buyscript", async (ctx) => {
     const scriptsList = loadScripts();
-
-    if (!scriptsList.length)
-        return ctx.answerCbQuery(`
-💻 Stok Script Kosong
-
-😕 Untuk saat ini belum ada script yang bisa diproses.
-Pantau terus ya, biasanya restock nggak lama kok.`, { show_alert: true });
-
-    await ctx.answerCbQuery().catch(() => {});
-
-    // 🔥 TRICK ANTI SPAM DOUBLE CLICK 🔥
-    try {
-        await ctx.deleteMessage(); 
-    } catch (err) {
-        return; // Stop jika pesan sudah terhapus (mencegah spam)
+    if (!scriptsList.length) {
+        return ctx.answerCbQuery("💻 Stok Script Kosong\n\n😕 Untuk saat ini belum ada script yang bisa diproses.", { show_alert: true });
     }
-
-    const scriptButtons = scriptsList.map(s => [
-        {
-            text: `🗂 ${escapeHTML(s.name)} - Rp${s.price}`,
-            callback_data: `script|${s.name}` 
-        }
-    ]);
-
-    scriptButtons.push([
-        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "katalog"  }
-    ]);
-
-    ctx.reply("<b>Pilih Nama Script:</b>", {
-        parse_mode: "HTML",
-        reply_markup: { inline_keyboard: scriptButtons }
-    }).catch(() => {});
+    await ctx.answerCbQuery("⏳ Membuka katalog script...", { show_alert: false }).catch(() => {});
+    await renderScriptPage(ctx, 0); // Buka dari halaman 0 (pertama)
 });
 
+// ===== TANGKAP KLIK NEXT / PREV SCRIPT =====
+bot.action(/script_page\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const page = parseInt(ctx.match[1]);
+    await renderScriptPage(ctx, page); 
+});
+
+bot.action("ignore", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {}); // Biar tombol "Hal 1/3" ga loading kalau diklik
+});
 
 
 bot.action("buyapp", async (ctx) => {
@@ -2786,7 +3147,7 @@ bot.action("profile", async (ctx) => {
         }).join('\n');
     }
 
-    const profileText = `<blockquote><b>🪪 Profile Kamu</b>\n━━━━━━━━━━━━━━━━━━━━━━\n<b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>\n<b>🆔 User ID:</b> <code>${user.id}</code>\n<b>📧 Username:</b> ${escapeHTML(userUsername)}\n<b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}\n<b>💰 Total Spent:</b> Rp${toRupiah(user.total_spent || 0)}\n<b>📊 Total Transaksi:</b> ${user.history ? user.history.length : 0}\n━━━━━━━━━━━━━━━━━━━━━━\n<b>📋 Last 3 Transactions:</b>\n\n${lastTransactions}</blockquote>`;
+    const profileText = `<blockquote><b>🪪 Profile Kamu</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n<b>📛 Nama:</b> <code>${escapeHTML(fullName)}</code>\n<b>🆔 User ID:</b> <code>${user.id}</code>\n<b>📧 Username:</b> ${escapeHTML(userUsername)}\n<b>📅 Join Date:</b> ${new Date(user.join_date).toLocaleDateString('id-ID')}\n<b>💰 Total Spent:</b> Rp${toRupiah(user.total_spent || 0)}\n<b>📊 Total Transaksi:</b> ${user.history ? user.history.length : 0}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n<b>📋 Last 3 Transactions:</b>\n\n${lastTransactions}</blockquote>`;
 
     ctx.reply(profileText, {
         parse_mode: "HTML", disable_web_page_preview: true,
@@ -3132,12 +3493,21 @@ Tingkatkan terus transaksi Anda dan jadilah Top Pengguna di bot kami!
     });
 });
 
-// ==========================================
-// ===== FULL LOGIKA TOMBOL ACTION SMM ======
-// ==========================================
+// ===== TOMBOL CEK JOIN =====
+bot.action("cek_join", async (ctx) => {
+    const joined = await isUserJoined(ctx);
+    
+    if (!joined) {
+        return ctx.answerCbQuery('❌ Kamu belum join channel! Silakan join terlebih dahulu.', { show_alert: true });
+    }
+
+    await ctx.answerCbQuery('✅ Verifikasi berhasil! Terima kasih sudah join.');
+    try { await ctx.deleteMessage(); } catch(e){}
+    return ctx.reply('🎉 <b>Akses Diberikan!</b>\nSilakan ketik /menu atau /start untuk mulai menggunakan bot.', { parse_mode: 'HTML' });
+});
+
 
 bot.action("smm_menu", async (ctx) => {
-    // 🔥 CEK APAKAH API SMM SUDAH DIISI ATAU BELUM 🔥
     if (!config.smm || !config.smm.apiId || !config.smm.apiKey) {
         return ctx.answerCbQuery(`
 ⚙️ Fitur SMM Belum Tersedia
@@ -3150,17 +3520,21 @@ Nanti kalau sudah siap, fitur ini bisa langsung dipakai.`, { show_alert: true })
     await ctx.answerCbQuery().catch(() => {});
     activeMenus[ctx.from.id] = ctx.callbackQuery.message.message_id;
 
-    const textSmm = `<blockquote>📈 <b>SMM PANEL AUTO ORDER</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━━━━\nLayanan suntik Sosmed (Followers, Likes, Views, dll) termurah dan otomatis 24 Jam!\n\nSilakan pilih menu di bawah ini:`;
+    const textSmm = `<blockquote>📈 <b>SMM PANEL AUTO ORDER</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━━━━\nLayanan suntik Sosmed termurah dan otomatis 24 Jam!\n\nSilakan pilih menu di bawah ini:`;
     
     const keyboard = {
         inline_keyboard: [
             [
-                { text: "🔍 Cari & Order Layanan", callback_data: "smm_search" }
+                { text: "🔍 Cari Manual", callback_data: "smm_search" },
+                { text: "📋 Daftar Kategori", callback_data: "smm_categories" }
             ], 
             [
-                { text: "📦 Status Pesanan", callback_data: "smm_status" }, 
-                { text: "🔄 Refill (Garansi)", callback_data: "smm_refill" }
+                { text: "📦 Status Order", callback_data: "smm_status" }, 
+                { text: "🔄 Request Refill", callback_data: "smm_refill" }
             ], 
+            [
+                { text: "🔎 Cek Status Refill", callback_data: "smm_refill_status" }
+            ],
             ...(isOwner(ctx) ? [[
                 { text: "💰 Cek Saldo Pusat (Owner)", callback_data: "smm_cek_pusat" }
             ]] : []),
@@ -3226,19 +3600,65 @@ bot.action("smm_cek_pusat", async (ctx) => {
         params.append('api_id', config.smm.apiId);
         params.append('api_key', config.smm.apiKey);
         
-        // 🔥 FIX ENDPOINT BERDASARKAN DOKUMENTASI 🔥
         const res = await axios.post(`${config.smm.baseUrl}/balance`, params);
         
-        if (!res.data || res.data.status === false) {
-            throw new Error(res.data.data || res.data.message || "Gagal cek saldo");
-        }
+        if (res.data.error) throw new Error(res.data.error);
         
         await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, 
-            `<blockquote>💰 <b>SALDO PUSAT (FAYUPEDIA)</b></blockquote>\n\n💳 <b>Sisa Saldo:</b> Rp ${Number(res.data.data.balance).toLocaleString('id-ID')}`, 
+            `<blockquote>💰 <b>SALDO PUSAT (FAYUPEDIA)</b></blockquote>\n\n💳 <b>Sisa Saldo:</b> Rp ${Number(res.data.balance).toLocaleString('id-ID')}`, 
             { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ Ke Menu SMM", callback_data: "smm_menu" }]] } }
         );
     } catch (err) {
-        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengecek saldo pusat: ${err.message}`);
+        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal mengecek saldo pusat:\n<code>${err.message}</code>`, { parse_mode: "HTML" });
+    }
+});
+
+// BAYAR QRIS SMM
+bot.action("smm_pay_qris", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    
+    // 🔥 1. EFEK LOADING ESTETIK 🔥
+    await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS SMM...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+    
+    // ⏱️ KASIH DELAY 2 DETIK
+    await new Promise(resolve => setTimeout(resolve, 2000)); 
+
+    const fromId = ctx.from.id;
+    const orderInfo = smmTempOrder[fromId];
+    if (!orderInfo) return ctx.editMessageText("❌ Sesi expired. Silakan cari ulang.", { parse_mode: "HTML" }).catch(()=>{});
+    
+    const fee = generateRandomFee();
+    const price = orderInfo.price + fee;
+
+    // 🔥 FIX: SATPAM HARGA MINIMAL QRIS (Rp 1.000) 🔥
+    if (price < 1000) {
+        return ctx.editMessageText(`<blockquote><b>❌ <b>PEMBAYARAN DITOLAK!</b>\n\nTotal tagihan Anda (Rp${price}) terlalu kecil untuk menggunakan metode QRIS.\n\n⚠️ <i>Minimal transaksi QRIS adalah <b>Rp1.000</b>. Silakan gunakan metode <b>Bayar via Saldo</b> untuk transaksi nominal kecil.</i></b></blockquote>`, { 
+            parse_mode: "HTML", 
+            reply_markup: { inline_keyboard: [[{ text: "↩️ Kembali ke SMM", callback_data: "smm_menu" }]] } 
+        }).catch(()=>{});
+    }
+
+    const paymentType = config.paymentGateway;
+    
+    try {
+        const pay = await createPayment(paymentType, price, config);
+        
+        // Pengecekan ekstra kalau API Payment lagi gangguan
+        if (!pay || !pay.qris) throw new Error("Gagal mendapatkan QRIS dari provider.");
+
+        orders[fromId] = { type: "smm", name: orderInfo.serviceName, amount: price, fee: fee, serviceId: orderInfo.serviceId, target: orderInfo.target, quantity: orderInfo.quantity, orderId: pay.orderId || null, paymentType: paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+        
+        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+        
+        // 🔥 2. HAPUS LOADING & KIRIM GAMBAR 🔥
+        try { await ctx.deleteMessage(); } catch (e) {}
+        const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(`SMM: ${orderInfo.serviceName.substring(0,30)}`, orderInfo.price, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+        
+        orders[fromId].qrMessageId = qrMsg.message_id;
+        startCheck(fromId, ctx);
+    } catch (err) {
+        // Tangkap error kalau provider payment error
+        await ctx.editMessageText(`❌ <b>Sistem Pembayaran Gangguan!</b>\n\nError: <code>${err.message}</code>\nSilakan coba lagi nanti atau gunakan metode Saldo.`, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "↩️ Kembali", callback_data: "smm_menu"}]]} }).catch(()=>{});
     }
 });
 
@@ -3246,22 +3666,28 @@ bot.action("smm_cek_pusat", async (ctx) => {
 // BAYAR SALDO SMM
 bot.action("smm_pay_saldo", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-    try { await ctx.deleteMessage(); } catch (e) { return; }
     
+    // 🔥 1. EFEK LOADING ESTETIK 🔥
+    await ctx.editMessageText("<blockquote><b>⏳ <i>Memastikan saldo Anda cukup dan meneruskan pesanan ke server pusat...</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+    
+    // ⏱️ KASIH DELAY 2.5 DETIK
+    await new Promise(resolve => setTimeout(resolve, 2500)); 
+
     const fromId = ctx.from.id;
     const orderInfo = smmTempOrder[fromId];
-    if (!orderInfo) return ctx.reply("❌ Sesi expired.");
+    if (!orderInfo) return ctx.editMessageText("❌ Sesi expired. Silakan cari ulang.", { parse_mode: "HTML" }).catch(()=>{});
     
     const users = loadUsers();
     const userIndex = users.findIndex(u => u.id === fromId);
     
     users[userIndex].balance = users[userIndex].balance || 0;
     
-    if (users[userIndex].balance < orderInfo.price) return ctx.reply(`❌ Saldo tidak cukup!\nTagihan: Rp${orderInfo.price.toLocaleString('id-ID')}\nSaldo: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}`);
+    if (users[userIndex].balance < orderInfo.price) {
+        return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nTagihan: Rp${orderInfo.price.toLocaleString('id-ID')}\nSaldo: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}`, { parse_mode: "HTML" }).catch(()=>{});
+    }
     
-    const waitMsg = await ctx.reply("⏳ <i>Memproses pesanan ke server pusat...</i>", {parse_mode: "HTML"});
     try {
-        const params = newSearchParams();
+        const params = new URLSearchParams();
         params.append('api_id', config.smm.apiId);
         params.append('api_key', config.smm.apiKey);
         params.append('service', orderInfo.serviceId);
@@ -3269,9 +3695,10 @@ bot.action("smm_pay_saldo", async (ctx) => {
         params.append('quantity', orderInfo.quantity);
         
         const res = await axios.post(`${config.smm.baseUrl}/order`, params);
-        if (!res.data || res.data.status === false) return ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, `❌ Gagal memproses ke server pusat: ${res.data.data || "Server error"}`);
+        if (res.data.error) throw new Error(res.data.error);
         
-        const orderIdPusat = res.data.data.id;
+        const orderIdPusat = res.data.order || res.data.id;
+        
         users[userIndex].balance -= orderInfo.price;
         users[userIndex].total_spent = (users[userIndex].total_spent || 0) + orderInfo.price;
         users[userIndex].history = users[userIndex].history || [];
@@ -3283,33 +3710,161 @@ bot.action("smm_pay_saldo", async (ctx) => {
         
         delete smmTempOrder[fromId];
         const successText = `<blockquote><b>✅ ORDER SMM BERHASIL!</b></blockquote>\n\n📦 <b>Layanan:</b> ${escapeHTML(orderInfo.serviceName)}\n🔗 <b>Target:</b> ${escapeHTML(orderInfo.target)}\n📈 <b>Jumlah:</b> ${orderInfo.quantity.toLocaleString('id-ID')}\n💰 <b>Harga:</b> Rp${orderInfo.price.toLocaleString('id-ID')}\n🧾 <b>ID Pesanan SMM:</b> <code>${orderIdPusat}</code>\n💳 <b>Sisa Saldo:</b> Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>Pesanan segera diproses. Cek status berkala di menu SMM.</i>`;
-        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, successText, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "↩️ Ke Menu SMM", callback_data: "smm_menu"}]]} });
+        
+        // 🔥 2. UBAH LOADING JADI TEKS SUKSES 🔥
+        await ctx.editMessageText(successText, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "↩️ Ke Menu SMM", callback_data: "smm_menu"}]]} }).catch(()=>{});
     } catch (e) {
-        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, null, "❌ Terjadi kesalahan koneksi ke API.");
+        await ctx.editMessageText(`❌ Terjadi kesalahan API:\n<code>${e.message}</code>`, { parse_mode: "HTML" }).catch(()=>{});
     }
 });
 
-// BAYAR QRIS SMM
-bot.action("smm_pay_qris", async (ctx) => {
+
+// ===== TOMBOL CEK STATUS REFILL =====
+bot.action("smm_refill_status", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-    try { await ctx.deleteMessage(); } catch (e) { return; }
-    
-    const fromId = ctx.from.id;
-    const orderInfo = smmTempOrder[fromId];
-    if (!orderInfo) return ctx.reply("❌ Sesi expired.");
-    
-    const fee = generateRandomFee();
-    const price = orderInfo.price + fee;
-    const paymentType = config.paymentGateway;
-    const pay = await createPayment(paymentType, price, config);
-    
-    orders[fromId] = { type: "smm", name: orderInfo.serviceName, amount: price, fee: fee, serviceId: orderInfo.serviceId, target: orderInfo.target, quantity: orderInfo.quantity, orderId: pay.orderId || null, paymentType: paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
-    
-    const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
-    const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(`SMM: ${orderInfo.serviceName.substring(0,30)}`, orderInfo.price, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
-    orders[fromId].qrMessageId = qrMsg.message_id;
-    startCheck(fromId, ctx);
+    pendingSmmRefillStatus[ctx.from.id] = true;
+    try { await ctx.deleteMessage(); } catch (e) {}
+    return ctx.reply("<blockquote>🔎 <b>CEK STATUS REFILL</b></blockquote>\n\n👇 <b>Silakan balas pesan ini dengan memasukkan REFILL ID (Bukan Order ID):</b>", { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batal", callback_data: "smm_menu" }]] } });
 });
+
+// ===== FUNGSI PEMBUAT HALAMAN (PAGINATION) =====
+async function renderKategoriPage(ctx, page) {
+    const ITEMS_PER_PAGE = 10; // 🔥 FIX: Diubah jadi 10 kategori per halaman 🔥
+    const totalCats = global.smmCategories.length;
+    const totalPages = Math.ceil(totalCats / ITEMS_PER_PAGE);
+    
+    const startIdx = page * ITEMS_PER_PAGE;
+    const endIdx = startIdx + ITEMS_PER_PAGE;
+    const currentCats = global.smmCategories.slice(startIdx, endIdx);
+
+    const buttons = [];
+    for (let i = 0; i < currentCats.length; i += 2) {
+        const row = [];
+        const realIdx1 = startIdx + i;
+        row.push({ text: `📁 ${currentCats[i].substring(0, 18)}`, callback_data: `smm_cat|${realIdx1}` });
+        
+        if (currentCats[i + 1]) {
+            const realIdx2 = startIdx + i + 1;
+            row.push({ text: `📁 ${currentCats[i + 1].substring(0, 18)}`, callback_data: `smm_cat|${realIdx2}` });
+        }
+        buttons.push(row);
+    }
+
+    const navRow = [];
+    if (page > 0) navRow.push({ text: "⬅️ PREV", callback_data: `smm_page|${page - 1}` });
+    navRow.push({ text: `Hal ${page + 1}/${totalPages}`, callback_data: "ignore" });
+    if (page < totalPages - 1) navRow.push({ text: "NEXT ➡️", callback_data: `smm_page|${page + 1}` });
+    
+    buttons.push(navRow);
+    buttons.push([{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "smm_menu" }]);
+
+    const text = `<blockquote>📋 <b>DAFTAR KATEGORI SOSMED</b></blockquote>\n\nMenampilkan total <b>${totalCats} Kategori</b> dari pusat.\nSilakan pilih kategori di bawah ini:\n\n<i>*Gunakan tombol Prev/Next untuk melihat halaman lain.</i>`;
+
+    // 🔥 FIX: Transisi mulus pakai Gambar (editMessageMedia) 🔥
+    try {
+        await ctx.editMessageMedia(
+            { type: "photo", media: config.katalogImage, caption: text, parse_mode: "HTML" },
+            { reply_markup: { inline_keyboard: buttons } }
+        );
+    } catch (err) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.katalogImage, { caption: text, parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(() => {});
+    }
+}
+
+// ===== TOMBOL DAFTAR KATEGORI =====
+bot.action("smm_categories", async (ctx) => {
+    // 🔥 FIX: Hapus pesan waitMsg text biar gambarnya bisa ngedit dengan mulus
+    await ctx.answerCbQuery("⏳ Mengambil daftar kategori dari pusat...", { show_alert: false }).catch(() => {});
+
+    try {
+        const params = new URLSearchParams();
+        params.append('api_id', config.smm.apiId);
+        params.append('api_key', config.smm.apiKey);
+
+        const res = await axios.post(`${config.smm.baseUrl}/services`, params);
+        
+        let rawData = res.data;
+        if (typeof rawData === 'string') { try { rawData = JSON.parse(rawData); } catch(e){} }
+
+        let services = [];
+        if (Array.isArray(rawData)) services = rawData;
+        else if (rawData.data && Array.isArray(rawData.data)) services = rawData.data;
+        else if (rawData.services && Array.isArray(rawData.services)) services = rawData.services;
+        else throw new Error(`JAWABAN ASLI FAYUPEDIA:\n${JSON.stringify(rawData, null, 2)}`);
+
+        let uniqueCategories = [...new Set(services.map(s => {
+            const cat = s.category || s.kategori || s.brand || s.Category || "";
+            return cat ? String(cat).trim() : "";
+        }).filter(Boolean))];
+
+        if (uniqueCategories.length === 0) throw new Error("Kategori kosong dari server.");
+
+        global.smmCategories = uniqueCategories;
+        global.smmAllServices = services;
+
+        await renderKategoriPage(ctx, 0);
+
+    } catch (err) {
+        const detailErr = err.response ? JSON.stringify(err.response.data) : err.message;
+        await ctx.reply(`❌ <b>DEBUG SERVER:</b>\n<code>${detailErr}</code>`, { parse_mode: "HTML" });
+    }
+});
+
+// ===== TANGKAP KLIK NEXT / PREV =====
+bot.action(/smm_page\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    if (!global.smmCategories) {
+        return ctx.reply("❌ Sesi habis.", { reply_markup: { inline_keyboard: [[{ text: "📋 Daftar Kategori", callback_data: "smm_categories" }]] } });
+    }
+    const page = parseInt(ctx.match[1]);
+    await renderKategoriPage(ctx, page); 
+});
+
+// ===== KLIK SALAH SATU KATEGORI =====
+bot.action(/smm_cat\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const catIndex = parseInt(ctx.match[1]);
+    const fromId = ctx.from.id;
+
+    if (!global.smmCategories || !global.smmAllServices) return ctx.reply("❌ Sesi habis.", { reply_markup: { inline_keyboard: [[{ text: "📋 Daftar Kategori", callback_data: "smm_categories" }]] } });
+
+    const selectedCategory = global.smmCategories[catIndex];
+    
+    const filtered = global.smmAllServices.filter(s => {
+         const cat = s.category || s.kategori || s.brand || "";
+         return String(cat).trim() === selectedCategory;
+    });
+    
+    if (filtered.length === 0) return ctx.reply(`❌ Layanan kosong.`, { parse_mode: "HTML" });
+
+    const topResults = filtered.slice(0, 20); 
+    smmTempData[fromId] = topResults; 
+
+    const buttons = topResults.map((s, index) => {
+        const basePrice = Number(s.rate || s.price || s.harga || 0);
+        const hargaMarkup = Math.ceil(basePrice * config.smm.profitMargin);
+        const namaNya = s.name || s.nama || s.layanan || "Layanan";
+        return [{ text: `${String(namaNya).substring(0, 35)}... | Rp${hargaMarkup.toLocaleString('id-ID')}`, callback_data: `smm_select|${index}` }];
+    });
+    buttons.push([{ text: "↩️ Back Kategori", callback_data: "smm_categories" }]);
+
+    const textCat = `<blockquote>📁 <b>KATEGORI: ${escapeHTML(selectedCategory)}</b></blockquote>\n\nMenampilkan ${topResults.length} layanan teratas:\n<i>*Harga yang tertera adalah per 1.000 (1K).</i>`;
+
+    // 🔥 FIX: Transisi masuk kategori mulus pakai editMessageMedia 🔥
+    try {
+        await ctx.editMessageMedia(
+            { type: "photo", media: config.katalogImage, caption: textCat, parse_mode: "HTML" },
+            { reply_markup: { inline_keyboard: buttons } }
+        );
+    } catch (err) {
+        await ctx.deleteMessage().catch(() => {});
+        await ctx.replyWithPhoto(config.katalogImage, { caption: textCat, parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(() => {});
+    }
+});
+
+
+
 
 
 bot.action("back_to_main_menu", async (ctx) => {
@@ -3578,7 +4133,7 @@ bot.action(/^sub_sel\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     const [host, ip, domain] = ctx.match.slice(1);
     const hargaSubdo = 5000; 
     
-    const text = `<blockquote><b>📝 Konfirmasi Pemesanan Subdomain</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━\n🌐 Subdomain: <code>${host}.${domain}</code>\n📌 Pointing IP: <code>${ip}</code>\n💰 Harga: Rp${hargaSubdo.toLocaleString("id-ID")}\n━━━━━━━━━━━━━━━━━━━━━━\n⚠️ Yakin ingin melanjutkan pembayaran?`;
+    const text = `<blockquote><b>📝 Konfirmasi Pemesanan Subdomain</b></blockquote>\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🌐 Subdomain: <code>${host}.${domain}</code>\n📌 Pointing IP: <code>${ip}</code>\n💰 Harga: Rp${hargaSubdo.toLocaleString("id-ID")}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚠️ Yakin ingin melanjutkan pembayaran?`;
 
     return ctx.editMessageText(text, {
         parse_mode: "HTML",
@@ -3591,23 +4146,32 @@ bot.action(/^sub_sel\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     }).catch(() => {});
 });
 
+// --- KONFIRMASI SUBDOMAIN ---
 bot.action(/^sub_conf\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     const [host, ip, domain] = ctx.match.slice(1);
     const userId = ctx.from.id;
-    const hargaSubdo = 5000;
+    const basePrice = 5000;
+
+    // 🔥 MESIN DISKON BEKERJA 🔥
+    const harga = getDiscountPrice(userId, basePrice);
 
     const users = loadUsers();
     const user = users.find(u => u.id === userId);
     const saldo = user ? (user.balance || 0) : 0;
 
+    let teksHarga = `💰 <b>Harga Normal:</b> Rp${basePrice.toLocaleString('id-ID')}`;
+    if (harga.diskonPersen > 0) {
+        teksHarga = `💰 <b>Harga Normal:</b> <s>Rp${basePrice.toLocaleString('id-ID')}</s>\n🏷 <b>Diskon ${harga.roleName} (${harga.diskonPersen}%):</b> -Rp${harga.potongan.toLocaleString('id-ID')}\n💳 <b>Harga Akhir: Rp${harga.finalPrice.toLocaleString('id-ID')}</b>`;
+    }
+
     return ctx.editMessageText(
-        `🛒 <b>Pilih Metode Pembayaran</b>\n\n🌐 Produk: Subdomain ${host}.${domain}\n💰 Harga: Rp${hargaSubdo.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+        `🛒 <b>Pilih Metode Pembayaran</b>\n\n🌐 Produk: Subdomain ${host}.${domain}\n${teksHarga}\n\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
         {
             parse_mode: "html",
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: `💰 Bayar via Saldo`, callback_data: `sub_ps|${host}|${ip}|${domain}` }],
+                    [{ text: `💰 Bayar via Saldo (Rp${harga.finalPrice.toLocaleString('id-ID')})`, callback_data: `sub_ps|${host}|${ip}|${domain}` }],
                     [{ text: `📷 Bayar via QRIS`, callback_data: `sub_pq|${host}|${ip}|${domain}` }],
                     [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
                 ]
@@ -3616,29 +4180,70 @@ bot.action(/^sub_conf\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     );
 });
 
-// --- BAYAR VIA SALDO ---
-bot.action(/^sub_ps\|(.+)\|(.+)\|(.+)/, async (ctx) => {
+// --- BAYAR SUBDOMAIN VIA QRIS ---
+bot.action(/^sub_pq\|(.+)\|(.+)\|(.+)/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-    try { await ctx.deleteMessage(); } catch (e) { return; }
+    await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS Subdomain...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     const [host, ip, domain] = ctx.match.slice(1);
     const userId = ctx.from.id;
-    const hargaSubdo = 5000;
+    const basePrice = 5000;
+
+    // 🔥 MESIN DISKON BEKERJA 🔥
+    const harga = getDiscountPrice(userId, basePrice);
+    const fee = generateRandomFee();
+    const price = harga.finalPrice + fee;
+    
+    if (price < 1000) {
+        return ctx.editMessageText(`<blockquote><b>❌ PEMBAYARAN DITOLAK!</b>\nMinimal transaksi QRIS Rp1.000.</blockquote>`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } }).catch(()=>{});
+    }
+
+    const paymentType = config.paymentGateway;
+    try {
+        const pay = await createPayment(paymentType, price, config);
+        if (!pay || !pay.qris) throw new Error("Gagal membuat QRIS");
+
+        orders[userId] = { type: "subdo", host, ip, domain, name: `Subdomain ${host}.${domain}`, amount: price, fee, orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+        try { await ctx.deleteMessage(); } catch (e) {}
+
+        let infoDiskon = harga.potongan > 0 ? `\n• Diskon Kasta    : -Rp${harga.potongan.toLocaleString('id-ID')}` : "";
+        const captionStruk = `<blockquote><b>━〔 DETAIL PEMBAYARAN QRIS 〕━</b></blockquote>\n<blockquote>🧾 <b>Informasi Pesanan</b>\n• Produk          : Subdomain ${host}.${domain}\n• Harga Normal    : Rp${basePrice.toLocaleString('id-ID')}${infoDiskon}\n• Biaya Layanan   : Rp${fee.toLocaleString('id-ID')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━</blockquote>\n<blockquote>💳 <b>Total Tagihan</b> : Rp${price.toLocaleString('id-ID')}</blockquote>\n<blockquote>⏳ <b>Batas Waktu:</b> 6 Menit.</blockquote>`;
+
+        const qrMsg = await ctx.replyWithPhoto(photo, { caption: captionStruk, parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+        orders[userId].qrMessageId = qrMsg.message_id;
+        startCheck(userId, ctx);
+    } catch(e) { await ctx.editMessageText(`❌ Gagal: ${e.message}`, {parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "❌ Batalkan", callback_data: "cancel_order"}]]}}).catch(()=>{}); }
+});
+
+// --- BAYAR SUBDOMAIN VIA SALDO ---
+bot.action(/^sub_ps\|(.+)\|(.+)\|(.+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    await ctx.editMessageText("<blockquote><b>⏳ <i>Sedang memastikan saldo & menembak API Cloudflare...</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const [host, ip, domain] = ctx.match.slice(1);
+    const userId = ctx.from.id;
+    const basePrice = 5000;
+
+    // 🔥 MESIN DISKON BEKERJA 🔥
+    const harga = getDiscountPrice(userId, basePrice);
+    const price = harga.finalPrice;
 
     const users = loadUsers();
     const userIndex = users.findIndex(u => u.id === userId);
-    
     users[userIndex].balance = users[userIndex].balance || 0;
     
-    if (users[userIndex].balance < hargaSubdo) return ctx.reply("❌ Saldo tidak cukup!");
+    if (users[userIndex].balance < price) {
+        return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nHarga Final: Rp${price.toLocaleString('id-ID')}`, { parse_mode: "HTML" }).catch(()=>{});
+    }
 
-    users[userIndex].balance -= hargaSubdo;
-    users[userIndex].total_spent = (users[userIndex].total_spent || 0) + hargaSubdo;
+    users[userIndex].balance -= price;
+    users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
     users[userIndex].history = users[userIndex].history || [];
-    users[userIndex].history.push({ product: `Subdomain: ${host}.${domain}`, amount: hargaSubdo, type: "subdo", details: `IP: ${ip}`, timestamp: new Date().toISOString() });
+    users[userIndex].history.push({ product: `Subdomain: ${host}.${domain}`, amount: price, type: "subdo", details: `IP: ${ip}`, timestamp: new Date().toISOString() });
     saveUsers(users);
-
-    await ctx.reply(`⏳ Sedang membuat Subdomain Cloudflare... Mohon tunggu.`);
 
     const api = config.subdomain[domain];
     const panel = `${host}.${domain}`;
@@ -3646,53 +4251,22 @@ bot.action(/^sub_ps\|(.+)\|(.+)\|(.+)/, async (ctx) => {
 
     try {
         const createSub = async (name) => {
-            const res = await axios.post(`https://api.cloudflare.com/client/v4/zones/${api.zone}/dns_records`,
-                { type: "A", name, content: ip, ttl: 3600, proxied: false },
-                { headers: { Authorization: `Bearer ${api.apitoken}`, "Content-Type": "application/json" } }
-            );
+            const res = await axios.post(`https://api.cloudflare.com/client/v4/zones/${api.zone}/dns_records`, { type: "A", name, content: ip, ttl: 3600, proxied: false }, { headers: { Authorization: `Bearer ${api.apitoken}`, "Content-Type": "application/json" } });
             if (!res.data.success) throw new Error("Gagal CF");
         };
-
-        await createSub(panel); 
-        await createSub(node);  
-
+        await createSub(panel); await createSub(node);  
+        
         const buyerInfo = { id: userId, name: ctx.from.first_name, username: ctx.from.username, totalSpent: users[userIndex].total_spent };
-        await notifyOwner(ctx, { type: "subdo", name: panel, amount: hargaSubdo, ip: ip }, buyerInfo);
+        await notifyOwner(ctx, { type: "subdo", name: panel, amount: price, ip: ip }, buyerInfo);
 
-        const textSukses = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n🌐 <b>Domain Panel:</b> <code>${panel}</code>\n🌐 <b>Domain Node:</b> <code>${node}</code>\n📌 <b>Target IP:</b> <code>${ip}</code>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>Subdomain sudah aktif dan terhubung ke IP kamu. (Propagasi DNS max 1-5 menit)</i>`;
-        await ctx.reply(textSukses, { parse_mode: "HTML" });
-
+        const textSukses = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n🌐 <b>Domain Panel:</b> <code>${panel}</code>\n🌐 <b>Domain Node:</b> <code>${node}</code>\n📌 <b>Target IP:</b> <code>${ip}</code>\n💰 Harga Dibayar: Rp${price.toLocaleString('id-ID')} <i>(Diskon ${harga.diskonPersen}%)</i>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>Subdomain sudah aktif. (Propagasi DNS max 1-5 menit)</i>`;
+        await ctx.editMessageText(textSukses, { parse_mode: "HTML" }).catch(()=>{});
     } catch (err) {
-        users[userIndex].balance += hargaSubdo;
-        saveUsers(users);
-        await ctx.reply("❌ Gagal membuat subdomain (Cloudflare API Error). Saldo telah dikembalikan otomatis.");
+        users[userIndex].balance += price; saveUsers(users);
+        await ctx.editMessageText("❌ Gagal membuat subdomain (Cloudflare API Error). Saldo telah dikembalikan.").catch(()=>{});
     }
 });
 
-// --- BAYAR VIA QRIS ---
-bot.action(/^sub_pq\|(.+)\|(.+)\|(.+)/, async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    try { await ctx.deleteMessage(); } catch (e) { return; }
-
-    const [host, ip, domain] = ctx.match.slice(1);
-    const userId = ctx.from.id;
-    const hargaSubdo = 5000;
-    const fee = generateRandomFee();
-    const price = hargaSubdo + fee;
-    const paymentType = config.paymentGateway;
-
-    const pay = await createPayment(paymentType, price, config);
-
-    orders[userId] = { 
-        type: "subdo", host, ip, domain, name: `Subdomain ${host}.${domain}`, amount: price, fee, 
-        orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 
-    };
-
-    const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
-    const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(`Subdomain ${host}.${domain}`, hargaSubdo, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
-    orders[userId].qrMessageId = qrMsg.message_id;
-    startCheck(userId, ctx);
-});
 
 
     // ===== MASUK MODE CS (LIVE CHAT) =====
@@ -4811,7 +5385,8 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
         });
     });
     
-        bot.action(/confirm_app_payment\|(.+)/, async (ctx) => {
+    // ===== OPSI PEMBAYARAN APP (DENGAN DISKON) =====
+    bot.action(/confirm_app_payment\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
         
         const [category, indexStr] = ctx.match[1].split("|");
@@ -4824,189 +5399,161 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
 
         const item = items[index];
         const userId = ctx.from.id;
-        const price = item.price; // Harga asli tanpa fee
+        
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, item.price);
         
         const users = loadUsers();
         const user = users.find(u => u.id === userId);
         const saldo = user ? (user.balance || 0) : 0;
 
-        // Berikan opsi pembayaran
+        // Bikin UI coret harga kalau dapet diskon
+        let teksHarga = `💰 <b>Harga Normal:</b> Rp${item.price.toLocaleString('id-ID')}`;
+        if (harga.diskonPersen > 0) {
+            teksHarga = `💰 <b>Harga Normal:</b> <s>Rp${item.price.toLocaleString('id-ID')}</s>\n🏷 <b>Diskon ${harga.roleName} (${harga.diskonPersen}%):</b> -Rp${harga.potongan.toLocaleString('id-ID')}\n💳 <b>Harga Akhir: Rp${harga.finalPrice.toLocaleString('id-ID')}</b>`;
+        }
+
         return ctx.editMessageText(
-            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: ${category.toUpperCase()} - ${item.description}\n💰 Harga: Rp${price.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: ${category.toUpperCase()} - ${item.description}\n${teksHarga}\n\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
             {
                 parse_mode: "html",
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_app|${category}|${index}` }],
+                        [{ text: `💰 Bayar via Saldo (Rp${harga.finalPrice.toLocaleString('id-ID')})`, callback_data: `pay_saldo_app|${category}|${index}` }],
                         [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_app|${category}|${index}` }],
                         [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
                     ]
                 }
             }
-        );
+        ).catch(err => console.log("Gagal edit pesan:", err));
     });
 
-
-    // ===== KONFIRMASI PEMBAYARAN APP =====
+    // ===== BAYAR APP VIA QRIS =====
     bot.action(/pay_qris_app\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        try { await ctx.deleteMessage(); } catch (e) { return; }
+        
+        // 🔥 1. EFEK LOADING ESTETIK 🔥
+        await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS Apps...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const [category, indexStr] = ctx.match[1].split("|");
         const index = parseInt(indexStr);
         const stocks = loadStocks();
         const items = stocks[category];
 
-        if (!items || !items[index]) {
-            return ctx.reply("❌ Item tidak ditemukan!");
-        }
-
+        if (!items || !items[index]) return ctx.editMessageText("❌ Item tidak ditemukan!", { parse_mode: "HTML" }).catch(()=>{});
         const item = items[index];
-        if (item.stock <= 0) {
-            return ctx.reply("❌ Stok habis!");
-        }
+        if (item.stock <= 0) return ctx.editMessageText("❌ Stok habis!", { parse_mode: "HTML" }).catch(()=>{});
 
         const userId = ctx.from.id;
-        const fee = generateRandomFee();
-        const basePrice = item.price
-        const price = item.price + fee;
-        const name = `${category.toUpperCase()} - ${item.description}`;
 
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, item.price);
+        const fee = generateRandomFee();
+        const price = harga.finalPrice + fee;
+
+        // 🔥 FIX: SATPAM HARGA MINIMAL QRIS (Rp 1.000) 🔥
+        if (price < 1000) {
+            return ctx.editMessageText(`<blockquote><b>❌ PEMBAYARAN DITOLAK!</b>\n\nTotal tagihan Anda (Rp${price}) terlalu kecil untuk menggunakan metode QRIS.\n\n⚠️ <i>Minimal transaksi QRIS adalah <b>Rp1.000</b>. Silakan gunakan metode <b>Bayar via Saldo</b>.</i></blockquote>`, { 
+                parse_mode: "HTML", 
+                reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } 
+            }).catch(()=>{});
+        }
+
+        const name = `${category.toUpperCase()} - ${item.description}`;
         const paymentType = config.paymentGateway;
 
-        const pay = await createPayment(paymentType, price, config);
+        try {
+            const pay = await createPayment(paymentType, price, config);
+            if (!pay || !pay.qris) throw new Error("Gagal membuat QRIS dari Server Payment");
 
-        orders[userId] = {
-            type: "app",
-            category,
-            itemIndex: index,
-            name,
-            description: item.description,
-            account: item.accounts[0],
-            accounts: item.accounts,
-            amount: price,
-            fee,
-            orderId: pay.orderId || null,
-            paymentType: paymentType,
-            chatId: ctx.chat.id,
-            expireAt: Date.now() + 6 * 60 * 1000
-        };
+            orders[userId] = {
+                type: "app", category, itemIndex: index, name, description: item.description,
+                account: item.accounts[0], accounts: item.accounts, amount: price, fee,
+                orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000
+            };
 
-        const photo =
-            paymentType === "pakasir"
-                ? { source: pay.qris }
-                : pay.qris;
+            const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+            try { await ctx.deleteMessage(); } catch (e) {}
 
-        const qrMsg = await ctx.replyWithPhoto(photo, {
-            caption: textOrder(name, basePrice, fee),
-            parse_mode: "html",
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]
-                ]
-            }
-        });
+            // Bikin Struk Keren
+            let infoDiskon = harga.potongan > 0 ? `\n• Diskon Kasta    : -Rp${harga.potongan.toLocaleString('id-ID')}` : "";
+            const captionStruk = `<blockquote><b>━〔 DETAIL PEMBAYARAN QRIS 〕━</b></blockquote>\n<blockquote>🧾 <b>Informasi Pesanan</b>\n• Produk          : ${escapeHTML(name)}\n• Harga Normal    : Rp${item.price.toLocaleString('id-ID')}${infoDiskon}\n• Biaya Layanan   : Rp${fee.toLocaleString('id-ID')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━</blockquote>\n<blockquote>💳 <b>Total Tagihan</b> : Rp${price.toLocaleString('id-ID')}</blockquote>\n<blockquote>⏳ <b>Batas Waktu:</b> 6 Menit.</blockquote>`;
 
-        orders[userId].qrMessageId = qrMsg.message_id;
-        startCheck(userId, ctx);
+            const qrMsg = await ctx.replyWithPhoto(photo, {
+                caption: captionStruk, parse_mode: "html",
+                reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] }
+            });
+
+            orders[userId].qrMessageId = qrMsg.message_id;
+            startCheck(userId, ctx);
+        } catch (err) {
+            await ctx.editMessageText(`❌ <b>Sistem Pembayaran Gangguan!</b>\n\nError: <code>${err.message}</code>\nSilakan coba lagi nanti.`, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "❌ Batalkan", callback_data: "cancel_order"}]]} }).catch(()=>{});
+        }
     });
+
+    // ===== BAYAR APP VIA SALDO =====
     bot.action(/pay_saldo_app\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        try { await ctx.deleteMessage(); } catch (e) { return; }
+        
+        // 🔥 1. EFEK LOADING ESTETIK 🔥
+        await ctx.editMessageText("<blockquote><b>⏳ <i>Sedang memastikan saldo & mengambil stok Apps...</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const [category, indexStr] = ctx.match[1].split("|");
         const index = parseInt(indexStr);
         const stocks = loadStocks();
         const items = stocks[category];
+        
+        if (!items || !items[index]) return ctx.editMessageText("❌ Item tidak ditemukan!").catch(()=>{});
         const item = items[index];
-        const price = item.price;
         const userId = ctx.from.id;
+
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, item.price);
+        const price = harga.finalPrice;
 
         const users = loadUsers();
         const userIndex = users.findIndex(u => u.id === userId);
-        
         users[userIndex].balance = users[userIndex].balance || 0;
         
-        // Cek apakah saldo cukup
         if (users[userIndex].balance < price) {
-            return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit dengan cara ketik:\n<code>/deposit nominal</code>`, { parse_mode: "HTML" });
+            return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Final: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" }).catch(()=>{});
         }
 
-        // Cek stok lagi untuk memastikan tidak dibeli orang lain di waktu bersamaan
-        if (item.stock <= 0) return ctx.reply("❌ Maaf, stok baru saja habis!");
+        if (item.stock <= 0) return ctx.editMessageText("❌ Maaf, stok baru saja habis!").catch(()=>{});
 
-        // Potong Saldo & Catat di history
         users[userIndex].balance -= price;
         users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
         
         const name = `${category.toUpperCase()} - ${item.description}`;
-        const transaction = {
-            product: name,
-            amount: price,
-            type: "app",
-            timestamp: new Date().toISOString()
-        };
         users[userIndex].history = users[userIndex].history || [];
-        users[userIndex].history.push(transaction);
+        users[userIndex].history.push({ product: name, amount: price, type: "app", timestamp: new Date().toISOString() });
         saveUsers(users);
 
-        // Ambil 1 akun dan potong stok
         const sentAccount = item.accounts.shift();
         item.stock -= 1;
 
         if (item.stock <= 0) {
             stocks[category].splice(index, 1);
-            if (stocks[category].length === 0) {
-                delete stocks[category];
-            }
+            if (stocks[category].length === 0) delete stocks[category];
         }
         saveStocks(stocks);
 
-        // --- NOTIFIKASI KE OWNER ---
-        const buyerInfo = {
-            id: userId,
-            name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''),
-            username: ctx.from.username,
-            totalSpent: users[userIndex].total_spent
-        };
-        const orderData = { type: "app", name: name, amount: price, category: category, description: item.description };
-        await notifyOwner(ctx, orderData, buyerInfo);
+        const buyerInfo = { id: userId, name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''), username: ctx.from.username, totalSpent: users[userIndex].total_spent };
+        await notifyOwner(ctx, { type: "app", name: name, amount: price, category: category, description: item.description }, buyerInfo);
 
-        // --- PENGIRIMAN FILE KE USER ---
         const fileName = `${category}_${Date.now()}.txt`;
-        const fileContent = `=== DATA AKUN ${category.toUpperCase()} ===\n\n` +
-            `Produk: ${escapeHTML(name)}\n` +
-            `Keterangan: ${escapeHTML(item.description)}\n` +
-            `Harga: Rp${toRupiah(price)}\n` +
-            `Tanggal: ${new Date().toLocaleString('id-ID')}\n\n` +
-            `=== DATA AKUN ===\n` +
-            `${escapeHTML(sentAccount)}\n\n` +
-            `=== INSTRUKSI ===\n` +
-            `1. Login dengan akun di atas\n` +
-            `2. Nikmati fitur premium\n` +
-            `3. Jangan bagikan akun ke orang lain\n` +
-            `4. Akun ini untuk personal use\n\n` +
-            `=== SUPPORT ===\n` +
-            `Jika ada masalah, hubungi: @${config.ownerUsername}`;
+        const fileContent = `=== DATA AKUN ${category.toUpperCase()} ===\n\nProduk: ${escapeHTML(name)}\nKeterangan: ${escapeHTML(item.description)}\nHarga: Rp${toRupiah(price)}\nTanggal: ${new Date().toLocaleString('id-ID')}\n\n=== DATA AKUN ===\n${escapeHTML(sentAccount)}\n\n=== INSTRUKSI ===\n1. Login dengan akun di atas\n2. Nikmati fitur premium\n3. Jangan bagikan akun ke orang lain\n4. Akun ini untuk personal use\n\n=== SUPPORT ===\nJika ada masalah, hubungi: @${config.ownerUsername}`;
 
         const tempFilePath = path.join(__dirname, 'temp', fileName);
         const tempDir = path.join(__dirname, 'temp');
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         fs.writeFileSync(tempFilePath, fileContent);
 
-        const appText = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>
+        const appText = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n📱 Produk: ${escapeHTML(name)}\n💰 Harga Dibayar: Rp${price.toLocaleString('id-ID')} <i>(Diskon ${harga.diskonPersen}%)</i>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n📁 Data akun telah dikirim dalam file .txt\n📝 Silakan download file untuk melihat detail akun\n\n<blockquote><b>📌 Cara Pakai:</b></blockquote>\n1. Login dengan akun yang tersedia\n2. Nikmati fitur premium\n3. Jangan bagikan akun ke orang lain`;
 
-📱 Produk: ${escapeHTML(name)}
-💰 Harga: Rp${toRupiah(price)}
-💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}
-
-📁 Data akun telah dikirim dalam file .txt
-📝 Silakan download file untuk melihat detail akun
-
-<blockquote><b>📌 Cara Pakai:</b></blockquote>
-1. Login dengan akun yang tersedia
-2. Nikmati fitur premium
-3. Jangan bagikan akun ke orang lain`;
+        try { await ctx.deleteMessage(); } catch(e){}
 
         try {
             await ctx.telegram.sendMessage(ctx.chat.id, appText, { parse_mode: "html" });
@@ -5015,12 +5562,10 @@ bot.action(/app_category\|(.+)/, async (ctx) => {
             });
             setTimeout(() => { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); }, 5000);
         } catch (error) {
-            console.error("Error sending file:", error);
-            const fallbackText = `<b>✅ Pembelian via Saldo Berhasil!</b>\n\n📱 Produk: ${escapeHTML(name)}\n💰 Harga: Rp${toRupiah(price)}\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>🔑 Data Akun: </b></blockquote>\n<code>${escapeHTML(sentAccount)}</code>\n\n⚠️ Note: Akun ini untuk personal use`;
+            const fallbackText = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n📱 Produk: ${escapeHTML(name)}\n💰 Harga Dibayar: Rp${price.toLocaleString('id-ID')} <i>(Diskon ${harga.diskonPersen}%)</i>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>🔑 Data Akun: </b></blockquote>\n<code>${escapeHTML(sentAccount)}</code>\n\n⚠️ Note: Akun ini untuk personal use`;
             await ctx.telegram.sendMessage(ctx.chat.id, fallbackText, { parse_mode: "html" });
         }
     });
-
 
 
 // Handler untuk kembali ke pilihan paket
@@ -5480,7 +6025,7 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
         });
     });
 
-    // ===== OPSI PEMBAYARAN PANEL =====
+    // ===== OPSI PEMBAYARAN PANEL (DENGAN DISKON) =====
     bot.action(/confirm_panel_payment\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
         
@@ -5490,61 +6035,227 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
         const priceKey = ram === "unli" ? "unlimited" : `${ram}`;
         const basePrice = hargaPanel[priceKey];
         if (!basePrice) return ctx.reply("Harga panel tidak ditemukan!");
+
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, basePrice);
         
         const users = loadUsers();
         const user = users.find(u => u.id === userId);
         const saldo = user ? (user.balance || 0) : 0;
 
+        // Bikin UI coret harga kalau dapet diskon
+        let teksHarga = `💰 <b>Harga Normal:</b> Rp${basePrice.toLocaleString('id-ID')}`;
+        if (harga.diskonPersen > 0) {
+            teksHarga = `💰 <b>Harga Normal:</b> <s>Rp${basePrice.toLocaleString('id-ID')}</s>\n🏷 <b>Diskon ${harga.roleName} (${harga.diskonPersen}%):</b> -Rp${harga.potongan.toLocaleString('id-ID')}\n💳 <b>Harga Akhir: Rp${harga.finalPrice.toLocaleString('id-ID')}</b>`;
+        }
+
         return ctx.editMessageText(
-            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: Panel ${ram === "unli" ? "Unlimited" : ram}\n👤 Username: ${username}\n💰 Harga: Rp${basePrice.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: Panel ${ram === "unli" ? "Unlimited" : ram}\n👤 Username: ${username}\n${teksHarga}\n\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
             {
                 parse_mode: "html",
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_panel|${ram}|${username}` }],
+                        [{ text: `💰 Bayar via Saldo (Rp${harga.finalPrice.toLocaleString('id-ID')})`, callback_data: `pay_saldo_panel|${ram}|${username}` }],
                         [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_panel|${ram}|${username}` }],
                         [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
                     ]
                 }
             }
-        );
+        ).catch(err => console.log("Gagal edit pesan:", err));
     });
 
     // ===== BAYAR PANEL VIA QRIS =====
     bot.action(/pay_qris_panel\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        try { await ctx.deleteMessage(); } catch (e) { return; }
+        await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS Panel...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const [ram, username] = ctx.match[1].split("|");
         const userId = ctx.from.id;
-        const fee = generateRandomFee();
+        
         const priceKey = ram === "unli" ? "unlimited" : `${ram}`;
         const basePrice = hargaPanel[priceKey];
-        if (!basePrice) return ctx.reply("Harga panel tidak ditemukan!");
+        if (!basePrice) return ctx.editMessageText("❌ Harga panel tidak ditemukan!").catch(()=>{});
 
-        const price = fee + basePrice;
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, basePrice);
+        const fee = generateRandomFee();
+        const price = harga.finalPrice + fee;
+
+        // 🔥 FIX: SATPAM HARGA MINIMAL QRIS (Rp 1.000) 🔥
+        if (price < 1000) {
+            return ctx.editMessageText(`<blockquote><b>❌ PEMBAYARAN DITOLAK!</b>\n\nTotal tagihan Anda (Rp${price}) terlalu kecil untuk menggunakan metode QRIS.\n\n⚠️ <i>Minimal transaksi QRIS adalah <b>Rp1.000</b>. Silakan gunakan metode <b>Bayar via Saldo</b>.</i></blockquote>`, { 
+                parse_mode: "HTML", 
+                reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } 
+            }).catch(()=>{});
+        }
+
         const name = `Panel ${ram === "unli" ? "Unlimited" : ram}`;
         const paymentType = config.paymentGateway;
-        const pay = await createPayment(paymentType, price, config);
+        try {
+            const pay = await createPayment(paymentType, price, config);
+            if (!pay || !pay.qris) throw new Error("Gagal membuat QRIS dari Server Payment");
 
-        orders[userId] = { type: "panel", username, ram, name, amount: price, fee, orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
-        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
-        const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(name, basePrice, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
-        orders[userId].qrMessageId = qrMsg.message_id;
-        startCheck(userId, ctx);
+            orders[userId] = { type: "panel", username, ram, name, amount: price, fee, orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+            const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+            try { await ctx.deleteMessage(); } catch (e) {}
+
+            // Bikin Struk Keren
+            let infoDiskon = harga.potongan > 0 ? `\n• Diskon Kasta    : -Rp${harga.potongan.toLocaleString('id-ID')}` : "";
+            const captionStruk = `<blockquote><b>━〔 DETAIL PEMBAYARAN QRIS 〕━</b></blockquote>\n<blockquote>🧾 <b>Informasi Pesanan</b>\n• Produk          : ${escapeHTML(name)}\n• Harga Normal    : Rp${basePrice.toLocaleString('id-ID')}${infoDiskon}\n• Biaya Layanan   : Rp${fee.toLocaleString('id-ID')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━</blockquote>\n<blockquote>💳 <b>Total Tagihan</b> : Rp${price.toLocaleString('id-ID')}</blockquote>\n<blockquote>⏳ <b>Batas Waktu:</b> 6 Menit.</blockquote>`;
+
+            const qrMsg = await ctx.replyWithPhoto(photo, { caption: captionStruk, parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+            orders[userId].qrMessageId = qrMsg.message_id;
+            startCheck(userId, ctx);
+        } catch(e) { await ctx.editMessageText(`❌ Gagal membuat QRIS:\n<code>${e.message}</code>`, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } }).catch(()=>{}); }
     });
 
     // ===== BAYAR PANEL VIA SALDO =====
     bot.action(/pay_saldo_panel\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        try { await ctx.deleteMessage(); } catch (e) { return; }
+        await ctx.editMessageText("<blockquote><b>⏳ <i>Sedang memastikan saldo & memproses Panel...</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const [ram, username] = ctx.match[1].split("|");
         const userId = ctx.from.id;
-
         const priceKey = ram === "unli" ? "unlimited" : `${ram}`;
-        const price = hargaPanel[priceKey];
-        if (!price) return ctx.reply("Harga panel tidak ditemukan!");
+        const basePrice = hargaPanel[priceKey];
+        if (!basePrice) return ctx.editMessageText("❌ Harga panel tidak ditemukan!").catch(()=>{});
+
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, basePrice);
+        const price = harga.finalPrice;
+
+        const users = loadUsers();
+        const userIndex = users.findIndex(u => u.id === userId);
+        users[userIndex].balance = users[userIndex].balance || 0;
+        
+        if (users[userIndex].balance < price) return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nSaldo: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Final: Rp${price.toLocaleString('id-ID')}`, { parse_mode: "HTML" }).catch(()=>{});
+
+        users[userIndex].balance -= price;
+        users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
+        const name = `Panel ${ram === "unli" ? "Unlimited" : ram}`;
+        users[userIndex].history = users[userIndex].history || [];
+        users[userIndex].history.push({ product: name, amount: price, type: "panel", details: `Username: ${username}, RAM: ${ram === "unli" ? "Unlimited" : ram + "GB"}`, timestamp: new Date().toISOString() });
+        saveUsers(users);
+
+        const buyerInfo = { id: userId, name: ctx.from.first_name, username: ctx.from.username, totalSpent: users[userIndex].total_spent };
+        await notifyOwner(ctx, { type: "panel", name, amount: price, username, ram }, buyerInfo);
+
+        const ramVal = ram === "unli" ? "Unlimited" : `${ram}GB`;
+        const fixUsername = username + randomNumber(3);
+        let res = await createPanel(fixUsername, ramVal.toLowerCase());
+        
+        if (!res.success) return ctx.editMessageText(`❌ Error membuat panel.\nHubungi admin @${config.ownerUsername}`).catch(()=>{});
+        res = res.data;
+        
+        const teksPanel = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n👤 Username: <code>${escapeHTML(res.username)}</code>\n🔑 Password: <code>${escapeHTML(res.password)}</code>\n💾 RAM: ${ramVal}\n🆔 Server ID: ${res.serverId}\n📛 Server Name: ${escapeHTML(res.serverName)}\n⏳ Expired: 1 Bulan\n💰 Harga Dibayar: Rp${price.toLocaleString('id-ID')} <i>(Diskon ${harga.diskonPersen}%)</i>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>📌 Cara Login:</b></blockquote>\n1. Klik tombol Login Panel di bawah\n2. Masukkan username & password\n3. Server siap dipakai!`;
+        await ctx.editMessageText(teksPanel, { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "🔗 Login Panel", url: res.panelUrl }]] } }).catch(()=>{});
+    });
+
+
+    // ===== OPSI PEMBAYARAN ADMIN PANEL (DENGAN DISKON) =====
+    bot.action(/confirm_admin\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        const username = ctx.match[1];
+        const userId = ctx.from.id;
+
+        const basePrice = hargaAdminPanel;
+        if (!basePrice) return ctx.reply("❌ Harga admin panel tidak ditemukan!");
+
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, basePrice);
+
+        const users = loadUsers();
+        const user = users.find(u => u.id === userId);
+        const saldo = user ? (user.balance || 0) : 0;
+
+        // Bikin UI coret harga kalau dapet diskon
+        let teksHarga = `💰 <b>Harga Normal:</b> Rp${basePrice.toLocaleString('id-ID')}`;
+        if (harga.diskonPersen > 0) {
+            teksHarga = `💰 <b>Harga Normal:</b> <s>Rp${basePrice.toLocaleString('id-ID')}</s>\n🏷 <b>Diskon ${harga.roleName} (${harga.diskonPersen}%):</b> -Rp${harga.potongan.toLocaleString('id-ID')}\n💳 <b>Harga Akhir: Rp${harga.finalPrice.toLocaleString('id-ID')}</b>`;
+        }
+
+        return ctx.editMessageText(
+            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: Admin Panel\n👤 Username: ${escapeHTML(username)}\n${teksHarga}\n\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+            {
+                parse_mode: "html",
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: `💰 Bayar via Saldo (Rp${harga.finalPrice.toLocaleString('id-ID')})`, callback_data: `pay_saldo_admin|${username}` }],
+                        [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_admin|${username}` }],
+                        [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
+                    ]
+                }
+            }
+        ).catch(err => console.log("Gagal edit pesan:", err));
+    });
+
+    // ===== BAYAR ADMIN VIA QRIS =====
+    bot.action(/pay_qris_admin\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        
+        // 🔥 1. EFEK LOADING ESTETIK 🔥
+        await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS Admin Panel...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const username = ctx.match[1];
+        const userId = ctx.from.id;
+        const basePrice = hargaAdminPanel;
+
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, basePrice);
+        const fee = generateRandomFee();
+        const price = harga.finalPrice + fee;
+        
+        // 🔥 FIX: SATPAM HARGA MINIMAL QRIS (Rp 1.000) 🔥
+        if (price < 1000) {
+            return ctx.editMessageText(`<blockquote><b>❌ PEMBAYARAN DITOLAK!</b>\n\nTotal tagihan Anda (Rp${price}) terlalu kecil untuk menggunakan metode QRIS.\n\n⚠️ <i>Minimal transaksi QRIS adalah <b>Rp1.000</b>. Silakan gunakan metode <b>Bayar via Saldo</b>.</i></blockquote>`, { 
+                parse_mode: "HTML", 
+                reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } 
+            }).catch(()=>{});
+        }
+
+        const name = "Admin Panel";
+        const paymentType = config.paymentGateway;
+
+        try {
+            const pay = await createPayment(paymentType, price, config);
+            if (!pay || !pay.qris) throw new Error("Gagal membuat QRIS dari Server Payment");
+
+            orders[userId] = { username: username, type: "admin", name, amount: price, fee, orderId: pay.orderId || null, paymentType: paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+            const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+            
+            // 🔥 2. HAPUS LOADING & MUNCULKAN QRIS 🔥
+            try { await ctx.deleteMessage(); } catch (e) {}
+
+            // Bikin Struk Keren
+            let infoDiskon = harga.potongan > 0 ? `\n• Diskon Kasta    : -Rp${harga.potongan.toLocaleString('id-ID')}` : "";
+            const captionStruk = `<blockquote><b>━〔 DETAIL PEMBAYARAN QRIS 〕━</b></blockquote>\n<blockquote>🧾 <b>Informasi Pesanan</b>\n• Produk          : ${escapeHTML(name)}\n• Harga Normal    : Rp${basePrice.toLocaleString('id-ID')}${infoDiskon}\n• Biaya Layanan   : Rp${fee.toLocaleString('id-ID')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━</blockquote>\n<blockquote>💳 <b>Total Tagihan</b> : Rp${price.toLocaleString('id-ID')}</blockquote>\n<blockquote>⏳ <b>Batas Waktu:</b> 6 Menit.</blockquote>`;
+
+            const qrMsg = await ctx.replyWithPhoto(photo, { caption: captionStruk, parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+            orders[userId].qrMessageId = qrMsg.message_id;
+            startCheck(userId, ctx);
+        } catch (err) {
+            await ctx.editMessageText(`❌ <b>Sistem Pembayaran Gangguan!</b>\n\nError: <code>${err.message}</code>\nSilakan coba lagi nanti atau gunakan metode Saldo.`, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "❌ Batalkan", callback_data: "cancel_order"}]]} }).catch(()=>{});
+        }
+    });
+
+    // ===== BAYAR ADMIN VIA SALDO =====
+    bot.action(/pay_saldo_admin\|(.+)/, async (ctx) => {
+        await ctx.answerCbQuery().catch(() => {});
+        
+        // 🔥 1. EFEK LOADING ESTETIK 🔥
+        await ctx.editMessageText("<blockquote><b>⏳ <i>Sedang memastikan saldo & membuat Admin Panel...</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const username = ctx.match[1];
+        const userId = ctx.from.id;
+        const basePrice = hargaAdminPanel;
+
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, basePrice);
+        const price = harga.finalPrice;
 
         const users = loadUsers();
         const userIndex = users.findIndex(u => u.id === userId);
@@ -5552,33 +6263,33 @@ bot.action(/del_script\|(.+)/, async (ctx) => {
         users[userIndex].balance = users[userIndex].balance || 0;
         
         if (users[userIndex].balance < price) {
-            return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" });
+            return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Final: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" }).catch(()=>{});
         }
 
         users[userIndex].balance -= price;
         users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
         
-        const name = `Panel ${ram === "unli" ? "Unlimited" : ram}`;
+        const name = "Admin Panel";
         users[userIndex].history = users[userIndex].history || [];
-        users[userIndex].history.push({ product: name, amount: price, type: "panel", details: `Username: ${username}, RAM: ${ram === "unli" ? "Unlimited" : ram + "GB"}`, timestamp: new Date().toISOString() });
+        users[userIndex].history.push({ product: name, amount: price, type: "admin", details: `Username: ${username}`, timestamp: new Date().toISOString() });
         saveUsers(users);
 
-        await ctx.reply(`⏳ Sedang membuat Panel Pterodactyl... Mohon tunggu.`);
-
         const buyerInfo = { id: userId, name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''), username: ctx.from.username, totalSpent: users[userIndex].total_spent };
-        await notifyOwner(ctx, { type: "panel", name, amount: price, username, ram }, buyerInfo);
+        await notifyOwner(ctx, { type: "admin", name, amount: price, username }, buyerInfo);
 
-        const ramVal = ram === "unli" ? "Unlimited" : `${ram}GB`;
         const fixUsername = username + randomNumber(3);
-
-        let res = await createPanel(fixUsername, ramVal.toLowerCase());
-        if (!res.success) return ctx.reply(`❌ Error! Terjadi kesalahan saat membuat panel.\nSilahkan hubungi admin @${config.ownerUsername}`);
-
-        res = res.data;
-        const teksPanel = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n👤 Username: <code>${escapeHTML(res.username)}</code>\n🔑 Password: <code>${escapeHTML(res.password)}</code>\n💾 RAM: ${ramVal}\n🆔 Server ID: ${res.serverId}\n📛 Server Name: ${escapeHTML(res.serverName)}\n⏳ Expired: 1 Bulan\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>📌 Cara Login:</b></blockquote>\n1. Klik tombol Login Panel di bawah\n2. Masukkan username & password\n3. Server siap dipakai!`;
-
-        await ctx.reply(teksPanel, { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "🔗 Login Panel", url: res.panelUrl }]] } });
+        try {
+            const res = await createAdmin(fixUsername);
+            const teksAdmin = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n🆔 User ID: ${res.id}\n👤 Username: <code>${escapeHTML(res.username)}</code>\n🔑 Password: <code>${escapeHTML(res.password)}</code>\n⏳ Expired: 1 Bulan\n💰 Harga Dibayar: Rp${price.toLocaleString('id-ID')} <i>(Diskon ${harga.diskonPersen}%)</i>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>📌 Cara Login:</b></blockquote>\n1. Klik tombol Login Panel di bawah\n2. Masukkan username & password\n3. Admin panel siap digunakan!`;
+            
+            // 🔥 2. UBAH LOADING JADI TEKS SUKSES 🔥
+            await ctx.editMessageText(teksAdmin, { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "🔗 Login Panel", url: res.panel }]] } }).catch(()=>{});
+        } catch (e) {
+            return ctx.editMessageText(`❌ Error! Terjadi kesalahan saat membuat admin panel.\nSilahkan hubungi admin @${config.ownerUsername}`).catch(()=>{});
+        }
     });
+
+
 
 
 bot.action(/^script\|(.+)/, async (ctx) => {
@@ -5601,14 +6312,14 @@ bot.action(/^script\|(.+)/, async (ctx) => {
 
     const text = `
 <blockquote><b>📝 Konfirmasi Pemesanan</b></blockquote>
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 Produk: Script ${escapeHTML(sc.name)}\n
 💰 Harga: Rp${Number(sc.price).toLocaleString("id-ID")}
 🕒 Waktu: ${waktu}
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 <blockquote><b>📝 Deskripsi:</b></blockquote>
 ${escapeHTML(sc.desk || "-")}
-━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ Apakah Anda yakin ingin melanjutkan pembayaran?
     `.trim();
 
@@ -5625,7 +6336,7 @@ ${escapeHTML(sc.desk || "-")}
     });
 });
 
-    // ===== OPSI PEMBAYARAN SCRIPT =====
+    // ===== OPSI PEMBAYARAN SCRIPT (DENGAN DISKON) =====
     bot.action(/confirm_script\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
         const name = ctx.match[1];
@@ -5635,20 +6346,26 @@ ${escapeHTML(sc.desk || "-")}
         const sc = scripts.find(s => s.name === name);
         if (!sc) return ctx.reply("❌ Script tidak ditemukan.");
 
-        const price = sc.price; // Harga asli tanpa fee
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, sc.price);
 
         const users = loadUsers();
         const user = users.find(u => u.id === userId);
         const saldo = user ? (user.balance || 0) : 0;
 
-        // KITA UBAH BAGIAN INI JADI EDIT MESSAGE BIAR MULUS
+        // Bikin UI coret harga kalau dapet diskon
+        let teksHarga = `💰 <b>Harga Normal:</b> Rp${sc.price.toLocaleString('id-ID')}`;
+        if (harga.diskonPersen > 0) {
+            teksHarga = `💰 <b>Harga Normal:</b> <s>Rp${sc.price.toLocaleString('id-ID')}</s>\n🏷 <b>Diskon ${harga.roleName} (${harga.diskonPersen}%):</b> -Rp${harga.potongan.toLocaleString('id-ID')}\n💳 <b>Harga Akhir: Rp${harga.finalPrice.toLocaleString('id-ID')}</b>`;
+        }
+
         return ctx.editMessageText(
-            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: Script ${escapeHTML(sc.name)}\n💰 Harga: Rp${price.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
+            `🛒 <b>Pilih Metode Pembayaran</b>\n\n📦 Produk: Script ${escapeHTML(sc.name)}\n${teksHarga}\n\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
             {
                 parse_mode: "html",
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_script|${sc.name}` }],
+                        [{ text: `💰 Bayar via Saldo (Rp${harga.finalPrice.toLocaleString('id-ID')})`, callback_data: `pay_saldo_script|${sc.name}` }],
                         [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_script|${sc.name}` }],
                         [{ text: "❌ Batalkan", callback_data: "back_to_script" }]
                     ]
@@ -5657,196 +6374,168 @@ ${escapeHTML(sc.desk || "-")}
         ).catch(err => console.log("Gagal edit pesan:", err));
     });
 
-
     // ===== BAYAR SCRIPT VIA QRIS =====
     bot.action(/pay_qris_script\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        try { await ctx.deleteMessage(); } catch (e) { return; }
+        
+        // 🔥 1. EFEK LOADING ESTETIK 🔥
+        await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS otomatis...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        
+        // ⏱️ KASIH DELAY 2 DETIK BIAR KELIATAN MIKIR
+        await new Promise(resolve => setTimeout(resolve, 2000)); 
 
         const name = ctx.match[1];
         const userId = ctx.from.id;
 
         const scripts = loadScripts();
         const sc = scripts.find(s => s.name === name);
-        if (!sc) return ctx.reply("❌ Script tidak ditemukan.");
+        if (!sc) return ctx.editMessageText("<blockquote><b>❌ Script tidak ditemukan</b></blockquote>", { parse_mode: "HTML" }).catch(()=>{});
 
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, sc.price);
         const fee = generateRandomFee();
-        const price = sc.price + fee;
+        const price = harga.finalPrice + fee; 
+        
+        // 🔥 FIX: SATPAM HARGA MINIMAL QRIS (Rp 1.000) 🔥
+        if (price < 1000) {
+            return ctx.editMessageText(`<blockquote><b>❌ PEMBAYARAN DITOLAK!</b>\n\nTotal tagihan Anda (Rp${price}) terlalu kecil untuk menggunakan metode QRIS.\n\n⚠️ <i>Minimal transaksi QRIS adalah <b>Rp1.000</b>. Silakan gunakan metode <b>Bayar via Saldo</b> untuk transaksi nominal kecil.</i></blockquote>`, { 
+                parse_mode: "HTML", 
+                reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } 
+            }).catch(()=>{});
+        }
+
         const paymentType = config.paymentGateway;
 
-        const pay = await createPayment(paymentType, price, config);
-        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+        try {
+            const pay = await createPayment(paymentType, price, config);
+            if (!pay || !pay.qris) throw new Error("Gagal membuat QRIS dari Server Payment");
+            
+            const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
 
-        orders[userId] = {
-            type: "script",
-            name: sc.name,
-            amount: price,
-            fee,
-            file: sc.file, // Path file script
-            orderId: pay.orderId || null,
-            paymentType,
-            chatId: ctx.chat.id,
-            expireAt: Date.now() + 6 * 60 * 1000
-        };
+            orders[userId] = {
+                type: "script", name: sc.name, amount: price, fee, file: sc.file,
+                orderId: pay.orderId || null, paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000
+            };
 
-        const qrMsg = await ctx.replyWithPhoto(photo, {
-            caption: textOrder(sc.name, sc.price, fee),
-            parse_mode: "html",
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]
-                ]
-            }
-        });
+            try { await ctx.deleteMessage(); } catch (e) {}
+            
+            // Bikin Struk Keren
+            let infoDiskon = harga.potongan > 0 ? `\n• Diskon Kasta    : -Rp${harga.potongan.toLocaleString('id-ID')}` : "";
+            const captionStruk = `<blockquote><b>━〔 DETAIL PEMBAYARAN QRIS 〕━</b></blockquote>\n<blockquote>🧾 <b>Informasi Pesanan</b>\n• Produk          : ${escapeHTML(sc.name)}\n• Harga Normal    : Rp${sc.price.toLocaleString('id-ID')}${infoDiskon}\n• Biaya Layanan   : Rp${fee.toLocaleString('id-ID')}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━</blockquote>\n<blockquote>💳 <b>Total Tagihan</b> : Rp${price.toLocaleString('id-ID')}</blockquote>\n<blockquote>⏳ <b>Batas Waktu:</b> 6 Menit.</blockquote>`;
 
-        orders[userId].qrMessageId = qrMsg.message_id;
-        startCheck(userId, ctx);
+            const qrMsg = await ctx.replyWithPhoto(photo, {
+                caption: captionStruk,
+                parse_mode: "html",
+                reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] }
+            });
+
+            orders[userId].qrMessageId = qrMsg.message_id;
+            startCheck(userId, ctx);
+        } catch (err) {
+            await ctx.editMessageText(`❌ <b>Sistem Pembayaran Gangguan!</b>\n\nError: <code>${err.message}</code>\nSilakan coba lagi nanti.`, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "❌ Batalkan", callback_data: "cancel_order"}]]} }).catch(()=>{});
+        }
     });
 
     // ===== BAYAR SCRIPT VIA SALDO =====
     bot.action(/pay_saldo_script\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        try { await ctx.deleteMessage(); } catch (e) { return; }
+        
+        // 🔥 1. EFEK LOADING ESTETIK 🔥
+        await ctx.editMessageText("<blockquote><b>⏳ <i>Sedang memastikan saldo Anda cukup dan memproses file...</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        
+        // ⏱️ KASIH DELAY 2 DETIK
+        await new Promise(resolve => setTimeout(resolve, 2000)); 
 
         const name = ctx.match[1];
         const userId = ctx.from.id;
 
         const scripts = loadScripts();
         const sc = scripts.find(s => s.name === name);
-        if (!sc) return ctx.reply("❌ Script tidak ditemukan.");
+        if (!sc) return ctx.editMessageText("❌ Script tidak ditemukan.", { parse_mode: "HTML" }).catch(()=>{});
 
-        const price = sc.price;
+        // 🔥 MESIN DISKON BEKERJA 🔥
+        const harga = getDiscountPrice(userId, sc.price);
+        const price = harga.finalPrice;
 
         const users = loadUsers();
         const userIndex = users.findIndex(u => u.id === userId);
-        
         users[userIndex].balance = users[userIndex].balance || 0;
         
         if (users[userIndex].balance < price) {
-            return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" });
+            return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Final: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" }).catch(()=>{});
         }
 
-        // Potong Saldo
         users[userIndex].balance -= price;
         users[userIndex].total_spent = (users[userIndex].total_spent || 0) + price;
-        
         users[userIndex].history = users[userIndex].history || [];
-        users[userIndex].history.push({ 
-            product: `Script: ${sc.name}`, 
-            amount: price, 
-            type: "script", 
-            details: sc.desk || "-", 
-            timestamp: new Date().toISOString() 
-        });
+        users[userIndex].history.push({ product: `Script: ${sc.name}`, amount: price, type: "script", details: sc.desk || "-", timestamp: new Date().toISOString() });
         saveUsers(users);
 
-        // Notifikasi Owner
-        const buyerInfo = { 
-            id: userId, 
-            name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''), 
-            username: ctx.from.username, 
-            totalSpent: users[userIndex].total_spent 
-        };
+        const buyerInfo = { id: userId, name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''), username: ctx.from.username, totalSpent: users[userIndex].total_spent };
         await notifyOwner(ctx, { type: "script", name: sc.name, amount: price }, buyerInfo);
 
-        // Kirim Pesan Sukses
-        await ctx.reply(`<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n📦 Produk: Script ${escapeHTML(sc.name)}\n💰 Harga: Rp${price.toLocaleString('id-ID')}\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>File script sedang dikirim...</i>`, { parse_mode: "html" });
+        await ctx.editMessageText(`<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n📦 Produk: Script ${escapeHTML(sc.name)}\n💰 Harga Dibayar: Rp${price.toLocaleString('id-ID')} <i>(Diskon ${harga.diskonPersen}%)</i>\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<i>File script sedang dikirim...</i>`, { parse_mode: "html" }).catch(()=>{});
 
-        // Kirim File
         try {
-            await ctx.telegram.sendDocument(
-                ctx.chat.id,
-                { source: sc.file },
-                {
-                    caption: `📁 Script: ${escapeHTML(sc.name)}`,
-                    parse_mode: "html"
-                }
-            );
+            await ctx.telegram.sendDocument(ctx.chat.id, { source: sc.file }, { caption: `📁 Script: ${escapeHTML(sc.name)}\n🎉 <i>Terima kasih telah menggunakan diskon ${harga.roleName}!</i>`, parse_mode: "html" });
         } catch (err) {
-            console.error("Gagal kirim script:", err);
             await ctx.reply("❌ Gagal mengirim file script. Silakan hubungi admin.");
         }
     });
 
-
 bot.action("back_to_script", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-
-    const scriptsList = loadScripts();
-    if (!scriptsList.length)
-        return ctx.editMessageText("📭 Stok script sedang kosong.");
-
-    const scriptButtons = scriptsList.map(s => ([
-        {
-            text: `📂 ${escapeHTML(s.name)} - Rp${Number(s.price).toLocaleString("id-ID")}`,
-            callback_data: `script|${s.name}`
-        }
-    ]));
-    
-    scriptButtons.push([
-        { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu"  }
-    ]);
-
-    await ctx.editMessageText("Pilih Script yang ingin dibeli:", {
-        parse_mode: "HTML",
-        reply_markup: {
-            inline_keyboard: scriptButtons
-        }
-    });
+    await renderScriptPage(ctx, 0); // Kembalikan ke katalog rapi
 });
 
-    // ===== OPSI PEMBAYARAN ADMIN =====
-    bot.action(/confirm_admin\|(.+)/, async (ctx) => {
-        await ctx.answerCbQuery().catch(() => {});
-        
-        const user = ctx.match[1];
-        const userId = ctx.from.id;
-        const basePrice = hargaAdminPanel;
-        
-        const users = loadUsers();
-        const dbUser = users.find(u => u.id === userId);
-        const saldo = dbUser ? (dbUser.balance || 0) : 0;
-
-        return ctx.editMessageText(
-            `🛒 <b>Pilih Metode Pembayaran</b>\n\n👑 Produk: Admin Panel\n👤 Username: ${user}\n💰 Harga: Rp${basePrice.toLocaleString('id-ID')}\n💳 Saldo Anda: Rp${saldo.toLocaleString('id-ID')}`, 
-            {
-                parse_mode: "html",
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_admin|${user}` }],
-                        [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_admin|${user}` }],
-                        [{ text: "❌ Batalkan", callback_data: "cancel_order" }]
-                    ]
-                }
-            }
-        );
-    });
 
     // ===== BAYAR ADMIN VIA QRIS =====
     bot.action(/pay_qris_admin\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        try { await ctx.deleteMessage(); } catch (e) { return; }
+        
+        // 🔥 1. EFEK LOADING ESTETIK 🔥
+        await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS Admin Panel...\nMohon tunggu sebentar.</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const user = ctx.match[1];
         const userId = ctx.from.id;
         const fee = generateRandomFee();
         const price = fee + hargaAdminPanel;
+        
+        // 🔥 FIX: SATPAM HARGA MINIMAL QRIS (Rp 1.000) 🔥
+        if (price < 1000) {
+            return ctx.editMessageText(`<blockquote><b>❌ PEMBAYARAN DITOLAK!</b>\n\nTotal tagihan Anda (Rp${price}) terlalu kecil untuk menggunakan metode QRIS.\n\n⚠️ <i>Minimal transaksi QRIS adalah <b>Rp1.000</b>. Silakan gunakan metode <b>Bayar via Saldo</b> untuk transaksi nominal kecil.</i></blockquote>`, { 
+                parse_mode: "HTML", 
+                reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } 
+            }).catch(()=>{});
+        }
+
         const name = "Admin Panel";
         const paymentType = config.paymentGateway;
 
-        const pay = await createPayment(paymentType, price, config);
+        try {
+            const pay = await createPayment(paymentType, price, config);
 
-        orders[userId] = { username: user, type: "admin", name, amount: price, fee, orderId: pay.orderId || null, paymentType: paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
-        const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
-        const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(name, hargaAdminPanel, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
-        orders[userId].qrMessageId = qrMsg.message_id;
-        startCheck(userId, ctx);
+            orders[userId] = { username: user, type: "admin", name, amount: price, fee, orderId: pay.orderId || null, paymentType: paymentType, chatId: ctx.chat.id, expireAt: Date.now() + 6 * 60 * 1000 };
+            const photo = paymentType === "pakasir" ? { source: pay.qris } : pay.qris;
+            
+            // 🔥 2. HAPUS LOADING & MUNCULKAN QRIS 🔥
+            try { await ctx.deleteMessage(); } catch (e) {}
+            const qrMsg = await ctx.replyWithPhoto(photo, { caption: textOrder(name, hargaAdminPanel, fee), parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan Order", callback_data: "cancel_order" }]] } });
+            orders[userId].qrMessageId = qrMsg.message_id;
+            startCheck(userId, ctx);
+        } catch (err) {
+            await ctx.editMessageText(`❌ <b>Sistem Pembayaran Gangguan!</b>\n\nError: <code>${err.message}</code>\nSilakan coba lagi nanti atau gunakan metode Saldo.`, { parse_mode: "HTML", reply_markup: {inline_keyboard: [[{text: "❌ Batalkan", callback_data: "cancel_order"}]]} }).catch(()=>{});
+        }
     });
 
     // ===== BAYAR ADMIN VIA SALDO =====
     bot.action(/pay_saldo_admin\|(.+)/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        try { await ctx.deleteMessage(); } catch (e) { return; }
+        
+        // 🔥 1. EFEK LOADING ESTETIK 🔥
+        await ctx.editMessageText("<blockquote><b>⏳ <i>Sedang memastikan saldo & membuat Admin Panel...</i></b></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const username = ctx.match[1];
         const userId = ctx.from.id;
@@ -5858,7 +6547,7 @@ bot.action("back_to_script", async (ctx) => {
         users[userIndex].balance = users[userIndex].balance || 0;
         
         if (users[userIndex].balance < price) {
-            return ctx.reply(`❌ Saldo tidak cukup!\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" });
+            return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nSaldo Anda: Rp${(users[userIndex].balance || 0).toLocaleString('id-ID')}\nHarga Produk: Rp${price.toLocaleString('id-ID')}\n\nSilakan deposit: <code>/deposit nominal</code>`, { parse_mode: "HTML" }).catch(()=>{});
         }
 
         users[userIndex].balance -= price;
@@ -5869,8 +6558,6 @@ bot.action("back_to_script", async (ctx) => {
         users[userIndex].history.push({ product: name, amount: price, type: "admin", details: `Username: ${username}`, timestamp: new Date().toISOString() });
         saveUsers(users);
 
-        await ctx.reply(`⏳ Sedang membuat Admin Panel... Mohon tunggu.`);
-
         const buyerInfo = { id: userId, name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''), username: ctx.from.username, totalSpent: users[userIndex].total_spent };
         await notifyOwner(ctx, { type: "admin", name, amount: price, username }, buyerInfo);
 
@@ -5878,11 +6565,14 @@ bot.action("back_to_script", async (ctx) => {
         try {
             const res = await createAdmin(fixUsername);
             const teksAdmin = `<blockquote><b>✅ Pembelian via Saldo Berhasil!</b></blockquote>\n\n🆔 User ID: ${res.id}\n👤 Username: <code>${escapeHTML(res.username)}</code>\n🔑 Password: <code>${escapeHTML(res.password)}</code>\n⏳ Expired: 1 Bulan\n💳 Sisa Saldo: Rp${users[userIndex].balance.toLocaleString('id-ID')}\n\n<blockquote><b>📌 Cara Login:</b></blockquote>\n1. Klik tombol Login Panel di bawah\n2. Masukkan username & password\n3. Admin panel siap digunakan!`;
-            await ctx.reply(teksAdmin, { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "🔗 Login Panel", url: res.panel }]] } });
+            
+            // 🔥 2. UBAH LOADING JADI TEKS SUKSES 🔥
+            await ctx.editMessageText(teksAdmin, { parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "🔗 Login Panel", url: res.panel }]] } }).catch(()=>{});
         } catch (e) {
-            return ctx.reply(`❌ Error! Terjadi kesalahan saat membuat admin panel.\nSilahkan hubungi admin @${config.ownerUsername}`);
+            return ctx.editMessageText(`❌ Error! Terjadi kesalahan saat membuat admin panel.\nSilahkan hubungi admin @${config.ownerUsername}`).catch(()=>{});
         }
     });
+
 
 
     function startCheck(userId, ctx) {
@@ -6345,17 +7035,18 @@ Terimakasih sudah membeli produk ♥️`,
                     
                     const res = await axios.post(`${config.smm.baseUrl}/order`, params);
                     
-                    if (!res.data || res.data.status === false) {
-                        await ctx.telegram.sendMessage(o.chatId, `❌ Pembayaran sukses, TAPI Gagal memproses SMM ke pusat: ${res.data.data || "Server error"}. Silakan SS struk ini dan lapor admin untuk refund/proses manual.`);
+                    if (res.data.error) {
+                        await ctx.telegram.sendMessage(o.chatId, `❌ Pembayaran sukses, TAPI Gagal memproses SMM ke pusat: <code>${res.data.error}</code>. Silakan SS struk ini dan lapor admin untuk refund/proses manual.`, { parse_mode: "HTML" });
                     } else {
-                        const orderIdPusat = res.data.data.id;
+                        const orderIdPusat = res.data.order || res.data.id;
                         const successText = `<blockquote><b>✅ ORDER SMM BERHASIL!</b></blockquote>\n\n📦 <b>Layanan:</b> ${escapeHTML(o.name)}\n🔗 <b>Target:</b> ${escapeHTML(o.target)}\n📈 <b>Jumlah:</b> ${o.quantity.toLocaleString('id-ID')}\n🧾 <b>ID Pesanan SMM:</b> <code>${orderIdPusat}</code>\n\n<i>Pesanan segera diproses oleh sistem.</i>`;
                         await ctx.telegram.sendMessage(o.chatId, successText, { parse_mode: "HTML" });
                     }
                 } catch (e) {
-                    await ctx.telegram.sendMessage(o.chatId, `❌ Terjadi kesalahan saat request ke pusat. Hubungi admin.`);
+                    await ctx.telegram.sendMessage(o.chatId, `❌ Terjadi kesalahan saat request ke pusat:\n<code>${e.message}</code>\nHubungi admin.`, { parse_mode: "HTML" });
                 }
             }
+
 
 
             
