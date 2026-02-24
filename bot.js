@@ -16,6 +16,8 @@ const hargaPanel = require("./price/panel.js");
 const hargaAdminPanel = require("./price/adminpanel.js");
 const vpsPackages = require("./price/vps.js");
 const doDB = path.join(__dirname, "/db/digitalocean.json");
+const ratingDB = path.join(__dirname, "/db/ratings.json");
+
 
 // prosses all produk
 const orders = {};
@@ -33,6 +35,7 @@ const pendingDeleteAllSaldo = {};
 
 // Inisialisasi database
 if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir);
+if (!fs.existsSync(ratingDB)) fs.writeFileSync(ratingDB, "[]");
 if (!fs.existsSync(scriptDB)) fs.writeFileSync(scriptDB, "[]");
 if (!fs.existsSync(userDB)) fs.writeFileSync(userDB, "[]");
 if (!fs.existsSync(stockDB)) fs.writeFileSync(stockDB, "{}");
@@ -54,6 +57,8 @@ const loadVouchers = () => JSON.parse(fs.readFileSync(voucherDB));
 const saveVouchers = (d) => fs.writeFileSync(voucherDB, JSON.stringify(d, null, 2));
 const loadPrompts = () => JSON.parse(fs.readFileSync(promptDB));
 const savePrompts = (d) => fs.writeFileSync(promptDB, JSON.stringify(d, null, 2));
+const loadRatings = () => JSON.parse(fs.readFileSync(ratingDB));
+const saveRatings = (d) => fs.writeFileSync(ratingDB, JSON.stringify(d, null, 2));
 
 
 // ===================== FUNGSI UTILITAS =====================
@@ -275,6 +280,72 @@ async function renderScriptPage(ctx, page) {
         // Kalau tombol diklik dari menu yang ada gambarnya, hapus dulu baru kirim teks
         await ctx.deleteMessage().catch(() => {});
         await ctx.reply(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(() => {});
+    }
+}
+
+// ===== MESIN HALAMAN RATING (TESTIMONI) =====
+async function renderRatingPage(ctx, page) {
+    const ratings = loadRatings();
+    
+    // Kalau belum ada yang ngasih rating
+    if (!ratings || ratings.length === 0) {
+        const emptyText = `<blockquote><b>🌟 ULASAN PENGGUNA</b></blockquote>\n\n📭 <i>Belum ada rating/ulasan dari pengguna. Jadilah yang pertama dengan mengetik:</i>\n<code>${config.prefix}rating 5 Mantap botnya!</code>`;
+        try {
+            await ctx.editMessageMedia(
+                { type: "photo", media: config.menuImage, caption: emptyText, parse_mode: "HTML" },
+                { reply_markup: { inline_keyboard: [[{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }]] } }
+            );
+        } catch (err) {
+            if (err.description && err.description.includes("message is not modified")) return;
+            await ctx.deleteMessage().catch(()=>{});
+            await ctx.replyWithPhoto(config.menuImage, { caption: emptyText, parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }]] } }).catch(()=>{});
+        }
+        return;
+    }
+
+    // Urutkan dari rating terbaru ke terlama
+    const sortedRatings = [...ratings].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const ITEMS_PER_PAGE = 3; // Nampilin 3 Ulasan per halaman
+    const totalPages = Math.ceil(sortedRatings.length / ITEMS_PER_PAGE);
+    const startIdx = page * ITEMS_PER_PAGE;
+    const endIdx = startIdx + ITEMS_PER_PAGE;
+    const currentItems = sortedRatings.slice(startIdx, endIdx);
+
+    const totalStar = ratings.reduce((sum, r) => sum + r.star, 0);
+    const avgStar = (totalStar / ratings.length).toFixed(1);
+
+    let text = `<blockquote><b>🌟 ULASAN PENGGUNA (RATING)</b></blockquote>\n`;
+    text += `📊 <b>Rata-rata:</b> ${avgStar} / 5.0 ⭐\n`;
+    text += `👥 <b>Total Ulasan:</b> ${ratings.length} Pengguna\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    currentItems.forEach((r, i) => {
+        const starDraw = "⭐".repeat(r.star);
+        const dateStr = new Date(r.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+        text += `👤 <b>${escapeHTML(r.name)}</b> ${r.username !== "-" ? `(@${r.username})` : ""}\n`;
+        text += `🗓️ ${dateStr} | ${starDraw}\n`;
+        text += `💬 <i>"${escapeHTML(r.text)}"</i>\n`;
+        text += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    });
+
+    const navRow = [];
+    if (page > 0) navRow.push({ text: "⬅️ PREV", callback_data: `rating_page|${page - 1}` });
+    navRow.push({ text: `Hal ${page + 1}/${totalPages}`, callback_data: "ignore" });
+    if (page < totalPages - 1) navRow.push({ text: "NEXT ➡️", callback_data: `rating_page|${page + 1}` });
+
+    const keyboard = { inline_keyboard: [navRow, [{ text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }]] };
+
+    // 🔥 Transisi Mulus pakai Gambar 🔥
+    try {
+        await ctx.editMessageMedia(
+            { type: "photo", media: config.menuImage, caption: text, parse_mode: "HTML" },
+            { reply_markup: keyboard }
+        );
+    } catch (err) {
+        if (err.description && err.description.includes("message is not modified")) return;
+        await ctx.deleteMessage().catch(()=>{});
+        await ctx.replyWithPhoto(config.menuImage, { caption: text, parse_mode: "HTML", reply_markup: keyboard }).catch(()=>{});
     }
 }
 
@@ -1809,6 +1880,9 @@ case "start": {
                     { text: "🏆 Top Pengguna", callback_data: "top_users" }
                 ],
                 [
+                    { text: "🌟 Cek Rating", callback_data: "cek_rating" }
+                ],
+                [
                     { text: "👤 Informasi", callback_data: "informasi_admin" },
                     { text: "⭐ Developer ", callback_data: "sosmed_admin" }
                 ],
@@ -1925,6 +1999,65 @@ case "adddistributor": {
     ctx.telegram.sendMessage(targetId, `🎉 <b>SELAMAT! AKUN KAMU TELAH DI-UPGRADE!</b>\n\n🔰 Pangkat Baru: <b>${roleName} ✅</b>\n⏳ Berlaku Sampai: ${expDate}\n\n<i>Nikmati diskon eksklusif untuk setiap transaksi layanan di bot kami!</i>`, { parse_mode: "HTML" }).catch(()=>{});
     break;
 }
+
+// ===== COMMAND GANTI FILE (REMOTE UPDATE) =====
+case "ganti": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner Only!");
+
+    const targetPath = args[0];
+    if (!targetPath) {
+        return ctx.reply(`❌ <b>Format salah!</b>\n\nCara pakai: Reply/balas file yang ingin diupload, lalu ketik:\n<code>${config.prefix}ganti [lokasi_file]</code>\n\nContoh:\n<code>${config.prefix}ganti db/users.json</code>\n<code>${config.prefix}ganti config.js</code>`, { parse_mode: "HTML" });
+    }
+
+    // Keamanan 1: Cegah akses keluar folder (Directory Traversal Attack)
+    if (targetPath.includes("..")) {
+        return ctx.reply("❌ Jalur tidak valid! Dilarang menggunakan '..'");
+    }
+
+    // Keamanan 2: Cegah ganti file krusial sistem
+    const forbiddenFiles = ["index.js", "package.json", "package-lock.json", ".env"];
+    if (forbiddenFiles.includes(targetPath.toLowerCase())) {
+        return ctx.reply(`❌ <b>DITOLAK!</b>\nFile <code>${targetPath}</code> adalah file inti sistem dan tidak boleh diganti dari Telegram demi keamanan.`, { parse_mode: "HTML" });
+    }
+
+    const replyMsg = ctx.message.reply_to_message;
+    if (!replyMsg || !replyMsg.document) {
+        return ctx.reply("❌ Kamu harus me-reply (membalas) sebuah file Document yang akan diupload!");
+    }
+
+    const doc = replyMsg.document;
+    const waitMsg = await ctx.reply(`⏳ <i>Sedang mengunduh dan menimpa file <b>${targetPath}</b>...</i>`, { parse_mode: "HTML" });
+
+    try {
+        // Proses Download File dari Telegram
+        const link = await ctx.telegram.getFileLink(doc.file_id);
+        const res = await axios.get(link.href, { responseType: "arraybuffer" });
+        
+        // Tentukan path absolut di server
+        const savePath = path.resolve(__dirname, targetPath);
+
+        // Cek apakah foldernya ada, kalau belum bot akan otomatis bikin foldernya
+        const dirName = path.dirname(savePath);
+        if (!fs.existsSync(dirName)) {
+            fs.mkdirSync(dirName, { recursive: true });
+        }
+
+        // Timpa filenya!
+        fs.writeFileSync(savePath, res.data);
+
+        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, undefined, `✅ <b>FILE BERHASIL DITIMPA!</b>\n\nFile <code>${targetPath}</code> telah diperbarui.\n\n🔄 <i>Bot akan melakukan Restart Otomatis dalam 3 detik untuk menerapkan perubahan...</i>`, { parse_mode: "HTML" });
+        
+        // Restart otomatis mesin Node.js (Railway / Pterodactyl akan otomatis nge-start ulang)
+        setTimeout(() => {
+            process.exit(1); 
+        }, 3000);
+
+    } catch (err) {
+        await ctx.telegram.editMessageText(ctx.chat.id, waitMsg.message_id, undefined, `❌ <b>Gagal mengganti file:</b>\n<code>${err.message}</code>`, { parse_mode: "HTML" });
+    }
+    break;
+}
+
 
 // ===== FITUR CABUT PANGKAT USER =====
 case "delrole":
@@ -2792,6 +2925,46 @@ case "delstockdo": {
         }
     );
 }
+
+// ===== COMMAND MEMBERI RATING =====
+case "rating":
+case "rate": {
+    if (args.length < 2) {
+        return ctx.reply(`❌ <b>Format Salah!</b>\n\nCara pakai: <code>${config.prefix}rating [bintang 1-5] [ulasan kamu]</code>\nContoh: <code>${config.prefix}rating 5 Botnya keren, prosesnya cepet banget!</code>`, { parse_mode: "HTML" });
+    }
+    
+    const star = parseInt(args[0]);
+    if (isNaN(star) || star < 1 || star > 5) {
+        return ctx.reply("❌ Angka bintang harus dari 1 sampai 5!");
+    }
+    
+    const ulasan = args.slice(1).join(" ");
+    if (ulasan.length < 5) return ctx.reply("❌ Ulasan terlalu pendek! Ketik minimal 5 huruf.");
+
+    const ratings = loadRatings();
+    const existingIdx = ratings.findIndex(r => r.id === fromId);
+    
+    const ratingData = {
+        id: fromId,
+        name: ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : ''),
+        username: ctx.from.username || "-",
+        star: star,
+        text: ulasan,
+        date: new Date().toISOString()
+    };
+
+    if (existingIdx !== -1) {
+        ratings[existingIdx] = ratingData; 
+        saveRatings(ratings);
+        return ctx.reply(`✅ <b>Rating berhasil diperbarui!</b>\n\nTerima kasih atas ulasan ${star} ⭐ nya!\n\n<i>Cek ulasanmu di Menu Utama -> 🌟 Cek Rating.</i>`, { parse_mode: "HTML" });
+    } else {
+        ratings.push(ratingData); 
+        saveRatings(ratings);
+        return ctx.reply(`✅ <b>Rating berhasil ditambahkan!</b>\n\nTerima kasih atas ulasan ${star} ⭐ nya!\n\n<i>Cek ulasanmu di Menu Utama -> 🌟 Cek Rating.</i>`, { parse_mode: "HTML" });
+    }
+    break;
+}
+
 
 case "buypanel": {
     if (!text) return ctx.reply(`Ketik ${config.prefix}buypanel username untuk membeli panel.`);
@@ -3918,6 +4091,9 @@ bot.action("back_to_main_menu", async (ctx) => {
       [  
          { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }, 
          { text: "🏆 Top Pengguna", callback_data: "top_users" } 
+      ],
+      [ 
+         { text: "🌟 Cek Rating", callback_data: "cek_rating" }
       ],
       [ 
          { text: "👤 Informasi", callback_data: "informasi_admin" },
@@ -6611,6 +6787,19 @@ bot.action("back_to_script", async (ctx) => {
             return ctx.editMessageText(`❌ Error! Terjadi kesalahan saat membuat admin panel.\nSilahkan hubungi admin @${config.ownerUsername}`).catch(()=>{});
         }
     });
+    
+    // ===== ACTION BUKA HALAMAN RATING =====
+bot.action("cek_rating", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    await renderRatingPage(ctx, 0);
+});
+
+bot.action(/rating_page\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const page = parseInt(ctx.match[1]);
+    await renderRatingPage(ctx, page); 
+});
+
 
 
 
