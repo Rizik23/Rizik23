@@ -265,15 +265,19 @@ async function renderScriptPage(ctx, page) {
 
     const text = `<blockquote>📦 <b>KATALOG SCRIPT & SOURCE CODE</b></blockquote>\n\nTotal ada <b>${totalItems} Produk</b> di etalase kami.\nSilakan pilih script yang ingin dibeli:\n\n<i>*Gunakan tombol Prev/Next untuk melihat halaman lain.</i>`;
 
-    // Eksekusi Tampilan (Anti-Error Beda Media)
+    // Eksekusi Tampilan (Anti-Error Beda Media & Anti-Spam Double Click)
     try {
         await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
     } catch (err) {
+        // 🔥 FIX: Abaikan error kalau cuma gara-gara user dobel klik (message is not modified)
+        if (err.description && err.description.includes("message is not modified")) return;
+        
         // Kalau tombol diklik dari menu yang ada gambarnya, hapus dulu baru kirim teks
         await ctx.deleteMessage().catch(() => {});
         await ctx.reply(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(() => {});
     }
 }
+
 
 async function broadcastNewProduct(ctx, type, name, description, price, cmds) {
   const users = loadUsers();
@@ -1962,6 +1966,35 @@ case "referral": {
     
     return ctx.reply(text, { parse_mode: "HTML", disable_web_page_preview: true });
 }
+
+// ===== DOWNLOAD DATABASE DARI SERVER =====
+case "getdb": {
+    if (!isOwner(ctx)) return ctx.reply("❌ Owner only!");
+    
+    await ctx.reply("⏳ <i>Sedang mengambil file database dari server...</i>", { parse_mode: "HTML" });
+    
+    try {
+        const filesToSent = [
+            { path: "./db/users.json", name: "users.json" },
+            { path: "./db/stocks.json", name: "stocks.json" },
+            { path: "./db/digitalocean.json", name: "digitalocean.json" },
+            { path: "./db/prompts.json", name: "prompts.json" }
+        ];
+
+        for (let file of filesToSent) {
+            if (fs.existsSync(file.path)) {
+                await ctx.telegram.sendDocument(ctx.chat.id, 
+                    { source: file.path, filename: file.name }, 
+                    { caption: `📂 Database: ${file.name}` }
+                );
+            }
+        }
+        return ctx.reply("✅ <b>Semua database berhasil di-backup!</b>\n\n<i>Silakan timpa file ini ke folder lokal/GitHub kamu sebelum melakukan update (push).</i>", { parse_mode: "HTML" });
+    } catch (err) {
+        return ctx.reply(`❌ Gagal mengambil database: ${err.message}`);
+    }
+}
+
 
 
 // ===== FITUR SALDO & DEPOSIT =====
@@ -3760,17 +3793,20 @@ async function renderKategoriPage(ctx, page) {
 
     const text = `<blockquote>📋 <b>DAFTAR KATEGORI SOSMED</b></blockquote>\n\nMenampilkan total <b>${totalCats} Kategori</b> dari pusat.\nSilakan pilih kategori di bawah ini:\n\n<i>*Gunakan tombol Prev/Next untuk melihat halaman lain.</i>`;
 
-    // 🔥 FIX: Transisi mulus pakai Gambar (editMessageMedia) 🔥
+    // 🔥 FIX: Transisi mulus pakai Gambar & Anti-Spam Click 🔥
     try {
         await ctx.editMessageMedia(
             { type: "photo", media: config.katalogImage, caption: text, parse_mode: "HTML" },
             { reply_markup: { inline_keyboard: buttons } }
         );
     } catch (err) {
+        if (err.description && err.description.includes("message is not modified")) return;
+        
         await ctx.deleteMessage().catch(() => {});
         await ctx.replyWithPhoto(config.katalogImage, { caption: text, parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(() => {});
     }
 }
+
 
 // ===== TOMBOL DAFTAR KATEGORI =====
 bot.action("smm_categories", async (ctx) => {
@@ -3851,17 +3887,20 @@ bot.action(/smm_cat\|(\d+)/, async (ctx) => {
 
     const textCat = `<blockquote>📁 <b>KATEGORI: ${escapeHTML(selectedCategory)}</b></blockquote>\n\nMenampilkan ${topResults.length} layanan teratas:\n<i>*Harga yang tertera adalah per 1.000 (1K).</i>`;
 
-    // 🔥 FIX: Transisi masuk kategori mulus pakai editMessageMedia 🔥
+    // 🔥 FIX: Transisi masuk kategori mulus & Anti-Spam Click 🔥
     try {
         await ctx.editMessageMedia(
             { type: "photo", media: config.katalogImage, caption: textCat, parse_mode: "HTML" },
             { reply_markup: { inline_keyboard: buttons } }
         );
     } catch (err) {
+        if (err.description && err.description.includes("message is not modified")) return;
+        
         await ctx.deleteMessage().catch(() => {});
         await ctx.replyWithPhoto(config.katalogImage, { caption: textCat, parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(() => {});
     }
 });
+
 
 
 
