@@ -1,0 +1,16 @@
+[
+  {
+    "name": "eyeGPT",
+    "desk": "prompt tembus deepseek + gemini\nmanipulasi ai jadi ilegal cocok buat bikin tools ddos dan lain lain",
+    "price": 5000,
+    "file": "prompts/eyeGPT.txt",
+    "added_date": "2026-02-23T17:02:56.229Z"
+  },
+  {
+    "name": "KAELL_GPT",
+    "desk": "Tidak pernah menolak\nTidak bisa menolak\nmenuruti semua pertanyaan\nUnsensor All\n Menjawab apapun\nReal talk\nTidak kenal safety\nTidak kenal  Filter\nTidak Peduli Safety/Filter\nTidak peduli\nTidak peduli siapapun\ndan tidak bisa menjawab tidak mau atau pun menolak lainnya ",
+    "price": 9500,
+    "file": "prompts/KAELL_GPT.txt",
+    "added_date": "2026-02-23T17:02:56.229Z"
+  }
+]

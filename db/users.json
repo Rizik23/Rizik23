@@ -2370,7 +2370,7 @@
     "join_date": "2026-02-08T06:54:05.259Z",
     "total_spent": 0,
     "history": [],
-    "balance": 13000,
+    "balance": 0,
     "canceled_count": 2
   },
   {
@@ -2452,7 +2452,7 @@
     "first_name": "⏤͟͟͞✚ 𝗞𝗮𝗲𝗹𝗹~𝗩𝗶𝗿𝗲𝘅𖥔𝗩𝗲𝗿𝗱𝗲𝗻🍷!",
     "last_name": "",
     "join_date": "2026-02-19T17:55:50.551Z",
-    "total_spent": 612,
+    "total_spent": 6355,
     "history": [
       {
         "product": "Admin Panel",
@@ -2460,9 +2460,138 @@
         "type": "admin",
         "timestamp": "2026-02-19T18:24:44.533Z",
         "details": "Username: piantech"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 9,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31702 | Qty: 50 | OrderID: 3431281",
+        "timestamp": "2026-02-23T19:05:46.244Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 11,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31703 | Qty: 60 | OrderID: 3431295",
+        "timestamp": "2026-02-23T19:08:47.073Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 23,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31704 | Qty: 130 | OrderID: 3431334",
+        "timestamp": "2026-02-23T19:19:01.699Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 70,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31704 | Qty: 400 | OrderID: 3433290",
+        "timestamp": "2026-02-24T03:08:05.996Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 27,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31703 | Qty: 150 | OrderID: 3433298",
+        "timestamp": "2026-02-24T03:09:52.508Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 35,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31702 | Qty: 200 | OrderID: 3433307",
+        "timestamp": "2026-02-24T03:11:03.110Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 51,
+        "type": "smm",
+        "details": "Target: https://t.me/TestsiKaell | Qty: 50 | OrderID: 3433323",
+        "timestamp": "2026-02-24T03:13:35.371Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 79,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31705 | Qty: 450 | OrderID: 3433435",
+        "timestamp": "2026-02-24T03:35:55.906Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 35,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31706 | Qty: 200 | OrderID: 3433627",
+        "timestamp": "2026-02-24T04:15:05.400Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 70,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31707 | Qty: 400 | OrderID: 3433636",
+        "timestamp": "2026-02-24T04:16:12.151Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 9,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31707 | Qty: 50 | OrderID: 3433648",
+        "timestamp": "2026-02-24T04:18:07.426Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 13,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31708 | Qty: 70 | OrderID: 3433665",
+        "timestamp": "2026-02-24T04:20:18.950Z"
+      },
+      {
+        "product": "SMM: Telegram Reaction | 🔥 + ...",
+        "amount": 12,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31708 | Qty: 15 | OrderID: 3433680",
+        "timestamp": "2026-02-24T04:21:57.684Z"
+      },
+      {
+        "product": "SMM: Telegram Reaction | 🤩 + ...",
+        "amount": 20,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31708 | Qty: 25 | OrderID: 3434004",
+        "timestamp": "2026-02-24T05:05:34.099Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 12,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31710 | Qty: 67 | OrderID: 3434880",
+        "timestamp": "2026-02-24T07:09:54.057Z"
+      },
+      {
+        "product": "Script: AUTO REPOT AKUN",
+        "amount": 5250,
+        "type": "script",
+        "details": "Script auto deact akun \nNo enc 100%\n rippot channel pribadi / public\n ripot akun pribadi\n  rippot group telegram\nTampilan Script sangat bagus\n version script v4.0",
+        "timestamp": "2026-02-24T07:16:50.921Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 9,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31710 | Qty: 50 | OrderID: 3435219",
+        "timestamp": "2026-02-24T07:51:34.788Z"
+      },
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 8,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31711 | Qty: 60 | OrderID: 3435432",
+        "timestamp": "2026-02-24T08:20:32.235Z"
       }
     ],
-    "canceled_count": 1
+    "canceled_count": 1,
+    "balance": 502300,
+    "role": "distributor",
+    "role_expired": 1777101363441
   },
   {
     "id": 8505278294,
@@ -2470,8 +2599,17 @@
     "first_name": "X",
     "last_name": "",
     "join_date": "2026-02-19T21:01:07.967Z",
-    "total_spent": 0,
-    "history": []
+    "total_spent": 7000,
+    "history": [
+      {
+        "product": "Panel unlimited",
+        "amount": 7000,
+        "type": "panel",
+        "details": "Username: KaellVirex, RAM: unlimitedGB",
+        "timestamp": "2026-02-23T16:58:02.808Z"
+      }
+    ],
+    "balance": 0
   },
   {
     "id": 7962454056,
@@ -2489,7 +2627,10 @@
     "last_name": "",
     "join_date": "2026-02-20T04:33:02.419Z",
     "total_spent": 0,
-    "history": []
+    "history": [],
+    "balance": 58000,
+    "role": "vip",
+    "role_expired": 1774514320271
   },
   {
     "id": 1906888031,
@@ -2508,5 +2649,145 @@
     "join_date": "2026-02-21T13:42:07.122Z",
     "total_spent": 0,
     "history": []
+  },
+  {
+    "id": 7836627369,
+    "username": "Myzxe",
+    "first_name": "Ｉ'Ｍ ＨＵＭＡＮ",
+    "last_name": "",
+    "join_date": "2026-02-23T19:22:15.501Z",
+    "total_spent": 42105,
+    "history": [
+      {
+        "product": "SMM: Telegram Post View | Last...",
+        "amount": 105,
+        "type": "smm",
+        "details": "Target: https://t.me/MyThe5/31704 | Qty: 600 | OrderID: 3431623",
+        "timestamp": "2026-02-23T20:44:16.744Z"
+      },
+      {
+        "product": "Script: MIYAKO V1 SAMPAI V7",
+        "amount": 35000,
+        "type": "script",
+        "details": "Script Website Bug \nNo enc 100%\n1 script yg spesial karna ada 6 versi\nVersion 1,2,3,5,6,7.1\nversi 4 ga ada yah\nRun Via panel node 20+",
+        "timestamp": "2026-02-24T02:41:08.616Z"
+      },
+      {
+        "product": "Panel unlimited",
+        "amount": 7000,
+        "type": "panel",
+        "details": "Username: RianSikaBoool, RAM: unlimitedGB",
+        "timestamp": "2026-02-24T02:48:39.606Z"
+      }
+    ],
+    "balance": 108000,
+    "referrals": 0,
+    "ref_earnings": 0
+  },
+  {
+    "id": 7794609727,
+    "username": "Myzx6",
+    "first_name": "𝚃𝚑𝚎 𝚆𝚊𝚛 𝙴𝚡𝚎",
+    "last_name": "",
+    "join_date": "2026-02-24T02:39:15.896Z",
+    "total_spent": 33000,
+    "history": [
+      {
+        "product": "Prompt: PROMPT JALBREAK",
+        "amount": 13000,
+        "type": "prompt",
+        "details": "prompt khusus deepseek, manipulasi ai jadi ilegal cocok buat bikin tools ddos dan lain lain",
+        "timestamp": "2026-02-24T02:42:24.041Z"
+      },
+      {
+        "product": "Script: INDICTIVE-CORE-V6",
+        "amount": 20000,
+        "type": "script",
+        "details": "Website Bug & Tools\nNo enc\nBebas Rinem\nNode 20+\nRun Via Panel \nTampilan Kece bagus & Profesional",
+        "timestamp": "2026-02-24T02:43:04.201Z"
+      }
+    ],
+    "balance": 117000,
+    "referrals": 0,
+    "ref_earnings": 0,
+    "role": "unverified",
+    "role_expired": null
+  },
+  {
+    "id": 6979716487,
+    "username": "Alfatedtz28",
+    "first_name": "alfat.syah",
+    "last_name": "",
+    "join_date": "2026-02-24T02:39:36.276Z",
+    "total_spent": 65000,
+    "history": [
+      {
+        "product": "Script: BASE APK RDVSP + API",
+        "amount": 25000,
+        "type": "script",
+        "details": "script base apk real + api via panel\n\nFitur-fitur Apk:\nDdos Menu\nWifi Killer\nBug Sender\nTikTok Downloader\nSpang Ngl\nQr Generator\nNik Parse\nInstagram Downloader\nNonton anime",
+        "timestamp": "2026-02-24T02:43:54.819Z"
+      },
+      {
+        "product": "Script: MIYAKO V1 SAMPAI V7",
+        "amount": 35000,
+        "type": "script",
+        "details": "Script Website Bug \nNo enc 100%\n1 script yg spesial karna ada 6 versi\nVersion 1,2,3,5,6,7.1\nversi 4 ga ada yah\nRun Via panel node 20+",
+        "timestamp": "2026-02-24T02:45:06.580Z"
+      },
+      {
+        "product": "ALIGHT MOTION - 1 Tahun",
+        "amount": 5000,
+        "type": "app",
+        "timestamp": "2026-02-24T02:45:32.207Z"
+      }
+    ],
+    "balance": 85000,
+    "referrals": 0,
+    "ref_earnings": 0
+  },
+  {
+    "id": 8564334450,
+    "username": "zam Hihi",
+    "first_name": "zam",
+    "last_name": "Hihi",
+    "join_date": "2026-02-24T04:11:09.984Z",
+    "total_spent": 0,
+    "history": [],
+    "balance": 0,
+    "referrals": 0,
+    "ref_earnings": 0
+  },
+  {
+    "id": 7899610678,
+    "username": "alfat ky",
+    "first_name": "alfat",
+    "last_name": "ky",
+    "join_date": "2026-02-24T05:27:19.369Z",
+    "total_spent": 0,
+    "history": [],
+    "balance": 0,
+    "referrals": 0,
+    "ref_earnings": 0
+  },
+  {
+    "id": 7146667517,
+    "username": "hamzzcollabies",
+    "first_name": "⏤͟͟͞Í𝐥𝐡𝐚𝐦𝐳𝐳",
+    "last_name": "- 𝐫𝐞𝐡𝐚𝐭 𓌳",
+    "join_date": "2026-02-24T08:37:08.608Z",
+    "total_spent": 8000,
+    "history": [
+      {
+        "product": "Admin Panel",
+        "amount": 8000,
+        "type": "admin",
+        "details": "Username: hamzzkmk",
+        "timestamp": "2026-02-24T08:38:29.522Z"
+      }
+    ],
+    "balance": 0,
+    "referrals": 0,
+    "ref_earnings": 0
   }
 ]
