@@ -117,7 +117,7 @@ await client.start({
       { command: "adddistributor", description: "Mᴇɴᴀᴍʙᴀʜ R★ʟʟᴇ Dɪs†ʀᴏ 🪙" },
       { command: "addregular", description: "Mᴇɴᴀᴍʙᴀʜ ≈ʀᴏʟʟᴇ Rᴇɢᴜʟᴀʀ 💰" },
       { command: "addvip", description: "Mᴇɴᴀᴍʙᴀʜ Vɪᴘ 💎" },
-      { command: "delrole", description: "Mᴇɴɢʜᴀᴘᴜs Rᴏʟʟᴇ ≈Usᴇʀ ♣" }
+      { command: "delrole", description: "Mᴇɴɢʜᴀᴘᴜs Rᴏʟʟᴇ ≈Usᴇʀ ♣" },
       { command: "addvoucher", description: "Mᴇᴍʙᴜᴀᴛ Rᴇғᴇʀʀᴀʟ Sᴀʟᴅᴏ Dᴀɴ Kᴜᴏᴛᴀ 🪔" }
     ];
 
