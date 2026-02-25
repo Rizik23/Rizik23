@@ -72,7 +72,7 @@ const saveSettings = (d) => fs.writeFileSync(settingsDB, JSON.stringify(d, null,
 
 
 // ===================== FUNGSI UTILITAS =====================
-
+const rumahOtpUrl = "https://rumahotp.com/api";
 const USERS_PER_PAGE = 10;
 
 // ===== HELPER ENCRYPT BOT =====
@@ -135,31 +135,6 @@ const getXObfuscationConfig = () => {
         // lock (selfDefending/antiDebug) dimatikan supaya TIDAK ERROR saat di-run
     };
 };
-
-
-// Fungsi untuk escape karakter html khusus
-function escapeMarkdown(text) {
-    if (!text) return '';
-    return String(text)
-        .replace(/_/g, '\\_')
-        .replace(/\*/g, '\\*')
-        .replace(/\[/g, '\\[')
-        .replace(/\]/g, '\\]')
-        .replace(/\(/g, '\\(')
-        .replace(/\)/g, '\\)')
-        .replace(/~/g, '\\~')
-        .replace(/`/g, '\\`')
-        .replace(/>/g, '\\>')
-        .replace(/#/g, '\\#')
-        .replace(/\+/g, '\\+')
-        .replace(/-/g, '\\-')
-        .replace(/=/g, '\\=')
-        .replace(/\|/g, '\\|')
-        .replace(/\{/g, '\\{')
-        .replace(/\}/g, '\\}')
-        .replace(/\./g, '\\.')
-        .replace(/!/g, '\\!');
-}
 
 function escapeHTML(str) {
   if (str === undefined || str === null) return '';
@@ -224,10 +199,6 @@ function getDiscountPrice(userId, basePrice) {
 // Fungsi untuk generate random fee
 function generateRandomFee() {
     return Math.floor(Math.random() * 200) + 100; // 100-300
-}
-
-function isPanelReady() {
-  return config.domain && config.apikey && config.capikey;
 }
 
 // Fungsi random number
@@ -551,8 +522,6 @@ Halo 👋 Selamat datang di layanan transaksi otomatis 24/7 Jam Nonstop.
 <b>🛒 Total Transaksi:</b> ${totalTransaksi}
 <b>💰 Total Pemasukan:</b> Rp${escapeHTML(totalPemasukan.toLocaleString("id-ID"))}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⊹ ࣪ ﹏𓊝﹏𓂁﹏⊹ ࣪ ˖⊹ ࣪ ﹏𓊝﹏𓂁﹏⊹ ࣪ ˖  🛸
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 };
 
@@ -694,23 +663,35 @@ const isOwner = (ctx) => {
     return fromId.toString() == config.ownerId;
 }
 
-// Cari kode ini:
-function addUser(userData) {
-    const users = loadUsers();
-    const existingUser = users.find(u => u.id === userData.id);
-    if (!existingUser) {
-        const userToAdd = {
-            ...userData,
-            username: userData.username ? escapeHTML(userData.username) : "",
-            first_name: userData.first_name ? escapeHTML(userData.first_name) : "",
-            last_name: userData.last_name ? escapeHTML(userData.last_name) : "",
-            balance: 0 // <--- TAMBAHKAN BARIS INI
-        };
-        users.push(userToAdd);
-        saveUsers(users);
-    }
-}
+// 6. AUTO-CEK OTP SETIAP 5 DETIK (BIAR KAYAK TEMEN LU)
+async function startNokosCheck(ctx, orderId, msgId) {
+    let attempts = 0;
+    const interval = setInterval(async () => {
+        attempts++;
+        try {
+            const res = await axios.get(`${rumahOtpUrl}/status?api_key=${config.RUMAHOTP}&id=${orderId}`);
+            
+            if (res.data.status === "success" && res.data.data.sms) {
+                clearInterval(interval);
+                const otp = res.data.data.sms;
+                await ctx.telegram.editMessageText(ctx.chat.id, msgId, null, 
+                    `<blockquote>📩 <b>KODE OTP MASUK!</b></blockquote>\n\nOrder ID: <code>${orderId}</code>\nNomor: <code>${res.data.data.number}</code>\n\n🔑 <b>KODE OTP:</b> <code>${otp}</code>\n\n<i>Silakan salin kode di atas. Terima kasih telah order!</i>`, 
+                    { parse_mode: "HTML" }
+                ).catch(()=>{});
+                
+                // Kirim notif ke Channel Testi kalau ada
+                if (config.testimoniChannel) {
+                    ctx.telegram.sendMessage(config.testimoniChannel, `✅ <b>OTP MASUK!</b>\nLayanan: Nokos\nOTP: <code>${otp}</code>`).catch(()=>{});
+                }
+            }
+        } catch (e) {}
 
+        // Timeout setelah 5 menit (60 kali cek)
+        if (attempts >= 60) {
+            clearInterval(interval);
+        }
+    }, 5000);
+}
 
 // Fungsi untuk update user history
 function updateUserHistory(userId, orderData, details = {}) {
@@ -1504,7 +1485,6 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
 // ==========================================
 // 🔥 FITUR TOP UP GAME & E-WALLET (ATLANTIC)
 // ==========================================
-// 1. MENU KATEGORI TOP UP
 // 1. MENU KATEGORI TOP UP (Dengan Pengecekan API)
 bot.action("menu_listharga", async (ctx) => {
   const settings = loadSettings();
@@ -1517,12 +1497,12 @@ bot.action("menu_listharga", async (ctx) => {
     const buttons = [
         [{ text: "🎮 Top Up Games", callback_data: "cat_games" }],
         [{ text: "💰 Saldo E-Wallet", callback_data: "cat_ewallet" }],
-        [{ text: "🔙 Kembali", callback_data: "back_to_main_menu" }] // Sesuaikan callback menu utama
+        [{ text: "🔙 Kembali", callback_data: "katalog" }] // Sesuaikan callback menu utama
     ];
 
     try {
         await ctx.editMessageMedia(
-            { type: "photo", media: config.menuImage || config.katalogImage, caption: text, parse_mode: "HTML" },
+            { type: "photo", media: config.katalogImage || config.menuImage, caption: text, parse_mode: "HTML" },
             { reply_markup: { inline_keyboard: buttons } }
         );
     } catch(e) {
@@ -1549,14 +1529,20 @@ bot.action(/cat_(games|ewallet)/, async (ctx) => {
     }
 });
 
-// 3. AMBIL DAFTAR HARGA DARI ATLANTIC API
+// ===== AMBIL DAFTAR HARGA DENGAN SISTEM HALAMAN (PAGINATION) =====
 bot.action(/product_(.+)/, async (ctx) => {
-    await ctx.answerCbQuery().catch(()=>{});
-    const command = ctx.match[1]; 
-    await ctx.editMessageCaption(`<blockquote>⏳ <i>Sedang mengambil daftar harga dari server...</i></blockquote>`, { parse_mode: "HTML" }).catch(()=>{});
+    await ctx.answerCbQuery().catch(() => {});
+    
+    // Ambil command produk dan halaman (default halaman 0)
+    const data = ctx.match[1].split('|');
+    const command = data[0]; 
+    const page = parseInt(data[1]) || 0; 
+    const itemsPerPage = 6; // Mau tampil berapa item per halaman? (Gue set 6 biar rapi)
+
+    await ctx.editMessageCaption(`<blockquote>⏳ <i>Sedang mengambil daftar harga ${command.toUpperCase()}...</i></blockquote>`, { parse_mode: "HTML" }).catch(() => {});
 
     const productInfo = config.PRODUCTS[command];
-    if (!productInfo) return ctx.editMessageCaption("❌ Produk tidak ditemukan.", { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } }).catch(()=>{});
+    if (!productInfo) return ctx.editMessageCaption("❌ Produk tidak ditemukan.", { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } }).catch(() => {});
 
     try {
         const params = new URLSearchParams();
@@ -1566,35 +1552,63 @@ bot.action(/product_(.+)/, async (ctx) => {
         const response = await axios.post(`${config.atlantic}/layanan/price_list`, params);
         if (!response.data.status) throw new Error("Gagal mengambil data dari server.");
 
+        // Filter Sesuai Provider & Status Available
         const filtered = response.data.data.filter(item => 
             item.provider?.toUpperCase().includes(productInfo.provider.toUpperCase()) && item.status === 'available'
         );
 
-        if (filtered.length === 0) return ctx.editMessageCaption(`❌ Produk ${productInfo.provider} sedang kosong.`, { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } }).catch(()=>{});
+        if (filtered.length === 0) return ctx.editMessageCaption(`❌ Produk ${productInfo.provider} sedang kosong.`, { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } }).catch(() => {});
 
+        // Urutkan Harga dari Termurah
         filtered.sort((a, b) => (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0));
 
-        const untung = parseFloat(config.untungTopup) || 500;
-        let text = `<blockquote>📋 <b>DAFTAR HARGA: ${productInfo.provider}</b></blockquote>\n\n`;
-        const buttons = [];
+        // Hitung Pagination
+        const totalPages = Math.ceil(filtered.length / itemsPerPage);
+        const startIdx = page * itemsPerPage;
+        const endIdx = startIdx + itemsPerPage;
+        const currentItems = filtered.slice(startIdx, endIdx);
 
-        // Nampilin 10 Item teratas biar mulus
-        const topItems = filtered.slice(0, 10);
+        const untung = parseFloat(config.untungTopup) || 500;
+        let text = `<blockquote>📋 <b>PRICELIST: ${productInfo.provider}</b></blockquote>\n\n`;
+        text += `Halaman: <b>${page + 1} / ${totalPages}</b>\n`;
+        text += `Silakan pilih nominal yang diinginkan:\n\n`;
+
+        const buttons = [];
         
-        topItems.forEach(i => {
-            const basePrice = parseFloat(i.price);
-            const finalPrice = Math.ceil(basePrice + untung);
-            text += `🛒 <b>${i.name}</b>\n💰 Harga: Rp${finalPrice.toLocaleString('id-ID')}\n\n`;
-            buttons.push([{ text: `🛒 Beli: ${i.name}`, callback_data: `buy_topup|${command}|${i.code}|${finalPrice}` }]);
+        // Rakit Tombol Produk
+        currentItems.forEach(i => {
+            const finalPrice = Math.ceil(parseFloat(i.price) + untung);
+            text += `🔹 <b>${i.name}</b>\n└ 💰 Rp${finalPrice.toLocaleString('id-ID')}\n\n`;
+            buttons.push([{ text: `🛒 Beli ${i.name}`, callback_data: `buy_topup|${command}|${i.code}|${finalPrice}` }]);
         });
 
-        buttons.push([{ text: "🔙 Kembali", callback_data: `cat_${command === 'ml' || command === 'ff' || command === 'pubg' ? 'games' : 'ewallet'}` }]);
+        // Rakit Tombol Navigasi (Prev - Next)
+        const navButtons = [];
+        if (page > 0) {
+            navButtons.push({ text: "⬅️ Prev", callback_data: `product_${command}|${page - 1}` });
+        }
+        if (page < totalPages - 1) {
+            navButtons.push({ text: "Next ➡️", callback_data: `product_${command}|${page + 1}` });
+        }
+        
+        if (navButtons.length > 0) buttons.push(navButtons);
 
-        await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+        // Tombol Kembali
+        const backCat = ['ml', 'ff', 'pubg'].includes(command) ? 'cat_games' : 'cat_ewallet';
+        buttons.push([{ text: "🔙 Kembali ke Kategori", callback_data: backCat }]);
+
+        await ctx.editMessageCaption(text, { 
+            parse_mode: "HTML", 
+            reply_markup: { inline_keyboard: buttons } 
+        });
+
     } catch (err) {
-        await ctx.editMessageCaption(`❌ Error: ${err.message}`, { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } }).catch(()=>{});
+        await ctx.editMessageCaption(`❌ Error: ${err.message}`, { 
+            reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } 
+        }).catch(() => {});
     }
 });
+
 
 // 4. KLIK TOMBOL BELI
 bot.action(/buy_topup\|(.+)\|(.+)\|(.+)/, async (ctx) => {
@@ -1713,6 +1727,7 @@ bot.action("admin_features", async (ctx) => {
         [btn('app', 'Apps Prem'), btn('script', 'Script')],
         [btn('prompt', 'Prompt AI'), btn('subdo', 'Subdomain')],
         [btn('smm', 'SMM Panel'), btn('topup', 'Top Up Game')],
+        [btn('nokos', 'Nokos OTP')],
         [{ text: "↩️ Kembali ke Katalog", callback_data: "katalog" }]
     ];
 
@@ -1758,7 +1773,207 @@ bot.action(/toggle_feature\|(.+)/, async (ctx) => {
     await ctx.editMessageReplyMarkup({ inline_keyboard: buttons }).catch(()=>{});
 });
 
+// ==========================================
+// 🔥 FITUR NOKOS OVER POWER (RUMAH OTP)
+// ==========================================
 
+// 1. MENU UTAMA NOKOS (PILIH LAYANAN)
+bot.action(/menu_nokos(?:\|(\d+))?/, async (ctx) => {
+  const settings = loadSettings();
+    if (!settings.nokos) {
+        return ctx.answerCbQuery("🚫 Fitur Nokos + Otp sedang OFFLINE / Maintenance.", { show_alert: true });
+    }
+    await ctx.answerCbQuery().catch(() => {});
+    const page = parseInt(ctx.match[1]) || 0;
+    const itemsPerPage = 8;
+
+    await ctx.editMessageCaption("<blockquote>⏳ <i>Sedang mengambil daftar layanan Nokos...</i></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+
+    try {
+        const res = await axios.get(`${rumahOtpUrl}/service?api_key=${config.RUMAHOTP}`);
+        if (!res.data || !Array.isArray(res.data)) throw new Error("Gagal ambil data layanan.");
+
+        // Filter layanan yang aktif & urutkan abjad
+        const services = res.data.filter(s => s.status === "1").sort((a, b) => a.name.localeCompare(b.name));
+        
+        const totalPages = Math.ceil(services.length / itemsPerPage);
+        const currentServices = services.slice(page * itemsPerPage, (page + 1) * itemsPerPage);
+
+        let text = `<blockquote>📲 <b>LAYANAN NOKOS (OTP)</b></blockquote>\n\n`;
+        text += `Halaman: <b>${page + 1} / ${totalPages}</b>\n`;
+        text += `Pilih aplikasi yang ingin Anda aktifkan:\n\n`;
+
+        const buttons = [];
+        currentServices.forEach(s => {
+            buttons.push([{ text: `🔹 ${s.name}`, callback_data: `nokos_country|${s.id}|0` }]);
+        });
+
+        // Navigasi Halaman
+        const nav = [];
+        if (page > 0) nav.push({ text: "⬅️ Prev", callback_data: `menu_nokos|${page - 1}` });
+        if (page < totalPages - 1) nav.push({ text: "Next ➡️", callback_data: `menu_nokos|${page + 1}` });
+        if (nav.length > 0) buttons.push(nav);
+        
+        buttons.push([{ text: "🔙 Kembali ke Katalog", callback_data: "katalog" }]);
+
+        await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+    } catch (err) {
+        await ctx.editMessageCaption(`❌ Error: ${err.message}`).catch(() => {});
+    }
+});
+
+// 2. PILIH NEGARA (Banyak negara, pake pagination juga!)
+bot.action(/nokos_country\|(\d+)\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const serviceId = ctx.match[1];
+    const page = parseInt(ctx.match[2]) || 0;
+    const itemsPerPage = 8;
+
+    await ctx.editMessageCaption("<blockquote>⏳ <i>Mencari ketersediaan negara...</i></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+
+    try {
+        const res = await axios.get(`${rumahOtpUrl}/price?api_key=${config.RUMAHOTP}&service=${serviceId}`);
+        if (!res.data || !Array.isArray(res.data)) throw new Error("Gagal ambil harga negara.");
+
+        // Filter negara yang stoknya > 0
+        const countries = res.data.filter(c => parseInt(c.stock) > 0);
+        if (countries.length === 0) return ctx.editMessageCaption("❌ Maaf, stok untuk layanan ini sedang kosong.", { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_nokos" }]] } });
+
+        const totalPages = Math.ceil(countries.length / itemsPerPage);
+        const currentCountries = countries.slice(page * itemsPerPage, (page + 1) * itemsPerPage);
+
+        let text = `<blockquote>🌍 <b>PILIH NEGARA</b></blockquote>\n\n`;
+        text += `Silakan pilih negara tujuan. Harga sudah termasuk admin bot.\n\n`;
+
+        const buttons = [];
+        const untung = config.UNTUNG_NOKOS || 1500;
+
+        currentCountries.forEach(c => {
+            const finalPrice = parseInt(c.price) + untung;
+            buttons.push([{ 
+                text: `${c.country} - Rp${finalPrice.toLocaleString('id-ID')} (Stok: ${c.stock})`, 
+                callback_data: `nokos_buy|${serviceId}|${c.country_id}|${finalPrice}` 
+            }]);
+        });
+
+        const nav = [];
+        if (page > 0) nav.push({ text: "⬅️ Prev", callback_data: `nokos_country|${serviceId}|${page - 1}` });
+        if (page < totalPages - 1) nav.push({ text: "Next ➡️", callback_data: `nokos_country|${serviceId}|${page + 1}` });
+        if (nav.length > 0) buttons.push(nav);
+
+        buttons.push([{ text: "🔙 Ganti Aplikasi", callback_data: "menu_nokos" }]);
+
+        await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+    } catch (err) {
+        await ctx.editMessageCaption(`❌ Error: ${err.message}`).catch(() => {});
+    }
+});
+
+// 3. PROSES BELI NOKOS (Cek Saldo & Order)
+bot.action(/nokos_buy\|(\d+)\|(\d+)\|(\d+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const [_, serviceId, countryId, price] = ctx.match;
+    const userId = ctx.from.id;
+
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    const userBalance = users[userIndex].balance || 0;
+
+    if (userBalance < price) {
+        return ctx.reply(`❌ <b>Saldo Tidak Cukup!</b>\nHarga: Rp${parseInt(price).toLocaleString('id-ID')}\nSaldo Anda: Rp${userBalance.toLocaleString('id-ID')}`, { parse_mode: "HTML" });
+    }
+
+    await ctx.reply("<blockquote>⏳ <i>Sedang memesan nomor, mohon tunggu...</i></blockquote>", { parse_mode: "HTML" }).catch(() => {});
+
+    try {
+        const res = await axios.get(`${rumahOtpUrl}/order?api_key=${config.RUMAHOTP}&service=${serviceId}&country=${countryId}`);
+        
+        if (res.data.status !== "success") {
+            throw new Error(res.data.message || "Gagal memesan nomor dari provider.");
+        }
+
+        const dataOrder = res.data.data; // id, number
+
+        // Potong Saldo
+        users[userIndex].balance -= parseInt(price);
+        users[userIndex].history = users[userIndex].history || [];
+        users[userIndex].history.push({
+            product: `Nokos ID: ${dataOrder.id}`,
+            amount: parseInt(price),
+            type: "nokos",
+            timestamp: new Date().toISOString()
+        });
+        saveUsers(users);
+
+        const textSukses = `<blockquote>✅ <b>NOMOR BERHASIL DIPESAN!</b></blockquote>\n\n` +
+            `📱 <b>Nomor:</b> <code>${dataOrder.number}</code>\n` +
+            `🆔 <b>Order ID:</b> <code>${dataOrder.id}</code>\n` +
+            `💰 <b>Harga:</b> Rp${parseInt(price).toLocaleString('id-ID')}\n\n` +
+            `💬 <b>OTP:</b> <i>Menunggu SMS masuk...</i>\n\n` +
+            `<i>Silakan gunakan nomor di atas. Jika OTP sudah muncul, akan otomatis dikirim ke sini.</i>`;
+
+        const buttons = [
+            [{ text: "🔄 Cek OTP", callback_data: `nokos_check|${dataOrder.id}` }],
+            [{ text: "❌ Batalkan (Refund)", callback_data: `nokos_cancel|${dataOrder.id}|${price}` }]
+        ];
+
+        const sentMsg = await ctx.reply(textSukses, { 
+            parse_mode: "HTML", 
+            reply_markup: { inline_keyboard: buttons } 
+        });
+
+        // 🔥 MULAI CEK OTP OTOMATIS 🔥
+        startNokosCheck(ctx, dataOrder.id, sentMsg.message_id);
+
+
+    } catch (err) {
+        await ctx.reply(`❌ <b>Gagal Order:</b> ${err.message}`).catch(() => {});
+    }
+});
+
+// 4. CEK OTP & CANCEL (Sesuai Logika Index Temen Lu)
+bot.action(/nokos_check\|(\d+)/, async (ctx) => {
+    const orderId = ctx.match[1];
+    await ctx.answerCbQuery("🔎 Mengecek OTP...").catch(() => {});
+
+    try {
+        const res = await axios.get(`${rumahOtpUrl}/status?api_key=${config.RUMAHOTP}&id=${orderId}`);
+        if (res.data.status === "success" && res.data.data.sms) {
+            await ctx.reply(`<blockquote>📩 <b>KODE OTP MASUK!</b></blockquote>\n\nOrder ID: <code>${orderId}</code>\nKode OTP: <code>${res.data.data.sms}</code>`, { parse_mode: "HTML" });
+        } else {
+            await ctx.answerCbQuery("⚠️ OTP belum masuk, silakan tunggu atau klik Cek lagi.", { show_alert: true });
+        }
+    } catch (err) {
+        await ctx.answerCbQuery("❌ Error saat cek OTP.").catch(() => {});
+    }
+});
+
+// 5. BATALKAN PESANAN (REFUND SALDO)
+bot.action(/nokos_cancel\|(\d+)\|(\d+)/, async (ctx) => {
+    const orderId = ctx.match[1];
+    const price = parseInt(ctx.match[2]);
+    const userId = ctx.from.id;
+
+    await ctx.answerCbQuery("🔄 Memproses pembatalan...").catch(() => {});
+
+    try {
+        const res = await axios.get(`${rumahOtpUrl}/cancel?api_key=${config.RUMAHOTP}&id=${orderId}`);
+        
+        if (res.data.status === "success" || res.data.message.includes("cancel")) {
+            // Balikin Saldo ke User
+            const users = loadUsers();
+            const userIndex = users.findIndex(u => u.id === userId);
+            users[userIndex].balance += price;
+            saveUsers(users);
+
+            await ctx.editMessageText(`<blockquote>❌ <b>ORDER DIBATALKAN</b></blockquote>\n\nOrder ID: <code>${orderId}</code>\nStatus: <b>Refund Berhasil</b>\n\n<i>Saldo sebesar Rp${price.toLocaleString('id-ID')} telah dikembalikan ke akun Anda.</i>`, { parse_mode: "HTML" });
+        } else {
+            await ctx.answerCbQuery("⚠️ Gagal batal: " + (res.data.message || "Provider menolak."), { show_alert: true });
+        }
+    } catch (err) {
+        await ctx.answerCbQuery("❌ Error koneksi ke provider.", { show_alert: true });
+    }
+});
 
 
     // #### HANDLE STORE BOT MENU ##### //
@@ -2031,7 +2246,7 @@ bot.action(/toggle_feature\|(.+)/, async (ctx) => {
             return;
         }
         
-                // ===== TANGKAP INPUT ID TOP UP GAME =====
+        // ===== TANGKAP INPUT ID TOP UP GAME (VERSI SIMPLE - NO STALKER) =====
         if (pendingTopupOrder[fromId]) {
             const state = pendingTopupOrder[fromId];
             if (body.toLowerCase() === "batal") {
@@ -2039,17 +2254,18 @@ bot.action(/toggle_feature\|(.+)/, async (ctx) => {
                 return ctx.reply("✅ <b>Top Up dibatalkan.</b>", { parse_mode: "HTML" });
             }
 
-            const targetId = body; // Target ID Game & Zone dari user
+            const targetId = body.trim();
             delete pendingTopupOrder[fromId];
 
-            // Simpan ke Sesi Sementara buat dibayar
+            // Simpan ke Sesi Sementara buat dibayar (Tanpa Stalking)
             topupTempOrder[fromId] = {
                 code: state.code,
                 target: targetId,
-                price: state.price
+                price: state.price,
+                nickname: "Buyer (No Check)" // Kita set default aja
             };
 
-            const confirmText = `<blockquote>🛒 <b>KONFIRMASI TOP UP</b></blockquote>\n\n📦 <b>Kode Item:</b> ${state.code}\n🔗 <b>ID Target:</b> <code>${escapeHTML(targetId)}</code>\n💰 <b>Harga Final:</b> Rp${state.price.toLocaleString('id-ID')}\n\nPilih metode pembayaran di bawah ini:`;
+            const confirmText = `<blockquote>🛒 <b>KONFIRMASI TOP UP</b></blockquote>\n\n📦 <b>Kode Item:</b> ${state.code}\n🔗 <b>ID Target:</b> <code>${escapeHTML(targetId)}</code>\n💰 <b>Harga Final:</b> Rp${state.price.toLocaleString('id-ID')}\n\n<i>Pastikan ID yang Anda masukkan sudah benar. Kesalahan input bukan tanggung jawab kami.</i>\n\nPilih metode pembayaran di bawah ini:`;
             
             return ctx.reply(confirmText, { 
                 parse_mode: "HTML", 
@@ -2062,6 +2278,8 @@ bot.action(/toggle_feature\|(.+)/, async (ctx) => {
                 } 
             });
         }
+
+
 
 
 
@@ -4620,6 +4838,9 @@ bot.action("katalog", async (ctx) => {
         { text: "🎮 ☇ Topup Game", callback_data: "menu_listharga" }
       ],
       [
+        { text: "🎫 ☇ Nokos OTP", callback_data: "menu_nokos" }
+      ],
+      [
         { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
       ]
     ]
@@ -5012,10 +5233,23 @@ Pesanmu akan langsung diteruskan ke Admin / Owner. Admin akan membalas secepat m
         const captionText = menuTextBot(ctx);
         const keyboard = {
             inline_keyboard: [
-                [ { text: "🛍️ Katalog Produk", callback_data: "katalog" } ],
-                [ { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }, { text: "🏆 Top Pengguna", callback_data: "top_users" } ],
-                [ { text: "👤 Informasi", callback_data: "informasi_admin" }, { text: "⭐ Developer ", callback_data: "sosmed_admin" } ],
-                [ { text: "🎧 CS / Tiket Bantuan", callback_data: "cs_ai_start" } ] // Tulisan tombol gue ganti
+      [ 
+         { text: "🛍️ Katalog Produk", callback_data: "katalog" } 
+      ],
+      [  
+         { text: "💳 Deposit Saldo", callback_data: "deposit_menu" }, 
+         { text: "🏆 Top Pengguna", callback_data: "top_users" } 
+      ],
+      [ 
+         { text: "🌟 Cek Rating", callback_data: "cek_rating" }
+      ],
+      [ 
+         { text: "👤 Informasi", callback_data: "informasi_admin" },
+         { text: "⭐ Developer ", callback_data: "sosmed_admin" }
+      ],
+      [
+         { text: "🎧 CS / Tiket Bantuan", callback_data: "cs_ai_start" }
+      ]
             ]
         };
 
