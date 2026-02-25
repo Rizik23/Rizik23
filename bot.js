@@ -19,10 +19,12 @@ const hargaAdminPanel = require("./price/adminpanel.js");
 const vpsPackages = require("./price/vps.js");
 const doDB = path.join(__dirname, "/db/digitalocean.json");
 const ratingDB = path.join(__dirname, "/db/ratings.json");
-
+const settingsDB = path.join(__dirname, "/db/settings.json");
 
 // prosses all produk
 const orders = {};
+const pendingTopupOrder = {};
+const topupTempOrder = {};
 const pendingDeposit = {};
 const pendingCsChat = {};
 const activeMenus = {};
@@ -45,6 +47,10 @@ if (!fs.existsSync(doDB)) fs.writeFileSync(doDB, "{}");
 if (!fs.existsSync(voucherDB)) fs.writeFileSync(voucherDB, "{}");
 if (!fs.existsSync(promptDir)) fs.mkdirSync(promptDir);
 if (!fs.existsSync(promptDB)) fs.writeFileSync(promptDB, "[]");
+if (!fs.existsSync(settingsDB)) fs.writeFileSync(settingsDB, JSON.stringify({
+    panel: true, admin: true, vps: true, do: true, app: true, 
+    script: true, prompt: true, subdo: true, smm: true, topup: true
+}, null, 2));
 
 // Load database
 const loadScripts = () => JSON.parse(fs.readFileSync(scriptDB));
@@ -61,6 +67,8 @@ const loadPrompts = () => JSON.parse(fs.readFileSync(promptDB));
 const savePrompts = (d) => fs.writeFileSync(promptDB, JSON.stringify(d, null, 2));
 const loadRatings = () => JSON.parse(fs.readFileSync(ratingDB));
 const saveRatings = (d) => fs.writeFileSync(ratingDB, JSON.stringify(d, null, 2));
+const loadSettings = () => JSON.parse(fs.readFileSync(settingsDB));
+const saveSettings = (d) => fs.writeFileSync(settingsDB, JSON.stringify(d, null, 2));
 
 
 // ===================== FUNGSI UTILITAS =====================
@@ -1493,6 +1501,265 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
     });
 
 
+// ==========================================
+// 🔥 FITUR TOP UP GAME & E-WALLET (ATLANTIC)
+// ==========================================
+// 1. MENU KATEGORI TOP UP
+// 1. MENU KATEGORI TOP UP (Dengan Pengecekan API)
+bot.action("menu_listharga", async (ctx) => {
+  const settings = loadSettings();
+    if (!settings.topup) {
+        return ctx.answerCbQuery("🚫 Fitur Top Up & E-Wallet sedang OFFLINE / Maintenance.", { show_alert: true });
+    }
+
+    await ctx.answerCbQuery().catch(()=>{});
+    const text = `<blockquote>🎮 <b>KATEGORI TOP UP & E-WALLET</b></blockquote>\n\nSilakan pilih kategori produk di bawah ini:`;
+    const buttons = [
+        [{ text: "🎮 Top Up Games", callback_data: "cat_games" }],
+        [{ text: "💰 Saldo E-Wallet", callback_data: "cat_ewallet" }],
+        [{ text: "🔙 Kembali", callback_data: "back_to_main_menu" }] // Sesuaikan callback menu utama
+    ];
+
+    try {
+        await ctx.editMessageMedia(
+            { type: "photo", media: config.menuImage || config.katalogImage, caption: text, parse_mode: "HTML" },
+            { reply_markup: { inline_keyboard: buttons } }
+        );
+    } catch(e) {
+        if (e.description && e.description.includes("message is not modified")) return;
+        try { await ctx.deleteMessage(); } catch(err){}
+        await ctx.replyWithPhoto(config.menuImage || config.katalogImage, { caption: text, parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(()=>{});
+    }
+});
+
+
+// 2. TAMPILIN SUB-KATEGORI (ML, FF, DANA, dll)
+bot.action(/cat_(games|ewallet)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(()=>{});
+    const categoryKey = ctx.match[0]; 
+    
+    if (config.CATEGORY[categoryKey]) {
+        const buttons = config.CATEGORY[categoryKey].map(p => ([
+            { text: `${p[0]}`, callback_data: `product_${p[1]}` }
+        ]));
+        buttons.push([{ text: "🔙 Kembali", callback_data: "menu_listharga" }]);
+
+        const text = `<blockquote>📦 <b>PILIH PRODUK</b></blockquote>\n\nSilakan pilih layanan yang ingin di order:`;
+        await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(()=>{});
+    }
+});
+
+// 3. AMBIL DAFTAR HARGA DARI ATLANTIC API
+bot.action(/product_(.+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(()=>{});
+    const command = ctx.match[1]; 
+    await ctx.editMessageCaption(`<blockquote>⏳ <i>Sedang mengambil daftar harga dari server...</i></blockquote>`, { parse_mode: "HTML" }).catch(()=>{});
+
+    const productInfo = config.PRODUCTS[command];
+    if (!productInfo) return ctx.editMessageCaption("❌ Produk tidak ditemukan.", { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } }).catch(()=>{});
+
+    try {
+        const params = new URLSearchParams();
+        params.append('api_key', config.ApikeyAtlantic);
+        params.append('type', 'prabayar');
+
+        const response = await axios.post(`${config.atlantic}/layanan/price_list`, params);
+        if (!response.data.status) throw new Error("Gagal mengambil data dari server.");
+
+        const filtered = response.data.data.filter(item => 
+            item.provider?.toUpperCase().includes(productInfo.provider.toUpperCase()) && item.status === 'available'
+        );
+
+        if (filtered.length === 0) return ctx.editMessageCaption(`❌ Produk ${productInfo.provider} sedang kosong.`, { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } }).catch(()=>{});
+
+        filtered.sort((a, b) => (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0));
+
+        const untung = parseFloat(config.untungTopup) || 500;
+        let text = `<blockquote>📋 <b>DAFTAR HARGA: ${productInfo.provider}</b></blockquote>\n\n`;
+        const buttons = [];
+
+        // Nampilin 10 Item teratas biar mulus
+        const topItems = filtered.slice(0, 10);
+        
+        topItems.forEach(i => {
+            const basePrice = parseFloat(i.price);
+            const finalPrice = Math.ceil(basePrice + untung);
+            text += `🛒 <b>${i.name}</b>\n💰 Harga: Rp${finalPrice.toLocaleString('id-ID')}\n\n`;
+            buttons.push([{ text: `🛒 Beli: ${i.name}`, callback_data: `buy_topup|${command}|${i.code}|${finalPrice}` }]);
+        });
+
+        buttons.push([{ text: "🔙 Kembali", callback_data: `cat_${command === 'ml' || command === 'ff' || command === 'pubg' ? 'games' : 'ewallet'}` }]);
+
+        await ctx.editMessageCaption(text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+    } catch (err) {
+        await ctx.editMessageCaption(`❌ Error: ${err.message}`, { reply_markup: { inline_keyboard: [[{ text: "🔙 Kembali", callback_data: "menu_listharga" }]] } }).catch(()=>{});
+    }
+});
+
+// 4. KLIK TOMBOL BELI
+bot.action(/buy_topup\|(.+)\|(.+)\|(.+)/, async (ctx) => {
+    await ctx.answerCbQuery().catch(()=>{});
+    const command = ctx.match[1];
+    const code = ctx.match[2]; 
+    const price = parseInt(ctx.match[3]); 
+    const userId = ctx.from.id;
+
+    pendingTopupOrder[userId] = { command, code, price };
+
+    const msg = `<blockquote>📝 <b>MASUKKAN ID TARGET</b></blockquote>\n\nSilakan balas (reply) pesan ini atau ketik langsung <b>ID Game / Nomor Tujuan</b> kamu.\n\n<i>Contoh MLBB: 12345678 1234 (Pakai spasi)\nContoh DANA/FF: 08123456789</i>\n\nKetik <code>Batal</code> untuk membatalkan.`;
+    await ctx.reply(msg, { parse_mode: "HTML" });
+});
+
+// 5. EKSEKUSI BAYAR PAKAI SALDO
+bot.action("pay_saldo_topup", async (ctx) => {
+    await ctx.answerCbQuery().catch(()=>{});
+    const userId = ctx.from.id;
+    const order = topupTempOrder[userId];
+    if (!order) return ctx.editMessageText("❌ Sesi habis, silakan order ulang.").catch(()=>{});
+
+    await ctx.editMessageText("<blockquote><b>⏳ <i>Sedang memastikan saldo & memproses top up...</i></b></blockquote>", { parse_mode: "HTML" }).catch(()=>{});
+
+    const users = loadUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    users[userIndex].balance = users[userIndex].balance || 0;
+
+    if (users[userIndex].balance < order.price) {
+        return ctx.editMessageText(`❌ <b>Saldo tidak cukup!</b>\nSaldo Anda: Rp${users[userIndex].balance.toLocaleString('id-ID')}\nHarga Final: Rp${order.price.toLocaleString('id-ID')}`, { parse_mode: "HTML" }).catch(()=>{});
+    }
+
+    try {
+        const params = new URLSearchParams();
+        params.append('api_key', config.ApikeyAtlantic);
+        params.append('code', order.code);
+        params.append('reff_id', "TP-" + Date.now());
+        params.append('target', order.target);
+
+        const res = await axios.post(`${config.atlantic}/transaksi/create`, params);
+        if (!res.data.status) throw new Error(res.data.message);
+
+        // Potong Saldo Bot jika sukses nembak API
+        users[userIndex].balance -= order.price;
+        users[userIndex].total_spent = (users[userIndex].total_spent || 0) + order.price;
+        users[userIndex].history = users[userIndex].history || [];
+        users[userIndex].history.push({ product: `TopUp: ${order.code}`, amount: order.price, type: "topup", details: `Target: ${order.target}`, timestamp: new Date().toISOString() });
+        saveUsers(users);
+        delete topupTempOrder[userId];
+
+        await ctx.editMessageText(`<blockquote><b>✅ TOP UP BERHASIL DIPROSES!</b></blockquote>\n\n🎮 <b>Item:</b> ${order.code}\n🔗 <b>Target:</b> <code>${escapeHTML(order.target)}</code>\n🔖 <b>Reff ID:</b> <code>${res.data.data.id}</code>\n💰 <b>Harga:</b> Rp${order.price.toLocaleString('id-ID')}\n\n<i>Pesanan akan masuk dalam 1-3 menit!</i>`, { parse_mode: "HTML" }).catch(()=>{});
+
+    } catch (err) {
+        await ctx.editMessageText(`❌ <b>Gagal Order ke Server:</b>\n<code>${err.message}</code>\n\n<i>Saldo Anda tidak dipotong.</i>`, { parse_mode: "HTML" }).catch(()=>{});
+    }
+});
+
+// 6. EKSEKUSI BAYAR PAKAI QRIS
+bot.action("pay_qris_topup", async (ctx) => {
+    await ctx.answerCbQuery().catch(()=>{});
+    const userId = ctx.from.id;
+    const order = topupTempOrder[userId];
+    if (!order) return ctx.editMessageText("❌ Sesi habis, silakan order ulang.").catch(()=>{});
+
+    await ctx.editMessageText("<blockquote><b>🔄 <i>Sedang membuat QRIS Top Up...</i></b></blockquote>", { parse_mode: "HTML" }).catch(()=>{});
+
+    const fee = Math.floor(Math.random() * 100); // Kode unik
+    const price = order.price + fee;
+
+    try {
+        const pay = await createPayment(config.paymentGateway, price, config);
+        if (!pay || !pay.qris) throw new Error("Gagal membuat QRIS");
+
+        orders[userId] = { 
+            type: "topup", 
+            code: order.code, 
+            target: order.target,
+            name: `TopUp ${order.code}`, 
+            amount: price, 
+            fee, 
+            orderId: pay.orderId || null, 
+            paymentType: config.paymentGateway, 
+            chatId: ctx.chat.id, 
+            expireAt: Date.now() + 6 * 60 * 1000 
+        };
+
+        const photo = config.paymentGateway === "pakasir" ? { source: pay.qris } : pay.qris;
+        try { await ctx.deleteMessage(); } catch(e){}
+
+        const captionStruk = `<blockquote><b>━〔 DETAIL QRIS TOP UP 〕━</b></blockquote>\n<blockquote>🧾 <b>Pesanan:</b> TopUp ${order.code}\n🔗 <b>Target:</b> ${order.target}\n💰 <b>Total Tagihan:</b> Rp${price.toLocaleString('id-ID')}</blockquote>\n\n<i>Bayar sesuai nominal. Top up akan otomatis masuk setelah dibayar!</i>`;
+
+        const qrMsg = await ctx.replyWithPhoto(photo, { caption: captionStruk, parse_mode: "html", reply_markup: { inline_keyboard: [[{ text: "❌ Batalkan", callback_data: "cancel_order" }]] } });
+        orders[userId].qrMessageId = qrMsg.message_id;
+        
+        // Memulai pengecekan otomatis (Pastikan fungsi startCheck ada di bot lu)
+        startCheck(userId, ctx);
+    } catch (err) {
+        await ctx.editMessageText(`❌ Error: ${err.message}`).catch(()=>{});
+    }
+});
+
+// ===== MENU PENGATURAN FITUR (OWNER ONLY) =====
+bot.action("admin_features", async (ctx) => {
+    await ctx.answerCbQuery().catch(()=>{});
+    if (!isOwner(ctx)) return ctx.answerCbQuery("❌ Akses Ditolak! Khusus Owner.", { show_alert: true });
+
+    const settings = loadSettings();
+    const btn = (key, name) => ({
+        text: settings[key] ? `🟢 ${name}` : `🔴 ${name}`,
+        callback_data: `toggle_feature|${key}`
+    });
+
+    const buttons = [
+        [btn('panel', 'Panel Biasa'), btn('admin', 'Admin Panel')],
+        [btn('vps', 'VPS DO'), btn('do', 'Akun DO')],
+        [btn('app', 'Apps Prem'), btn('script', 'Script')],
+        [btn('prompt', 'Prompt AI'), btn('subdo', 'Subdomain')],
+        [btn('smm', 'SMM Panel'), btn('topup', 'Top Up Game')],
+        [{ text: "↩️ Kembali ke Katalog", callback_data: "katalog" }]
+    ];
+
+    let text = `<blockquote>⚙️ <b>CONTROL PANEL FITUR</b></blockquote>\n\n`;
+    text += `Silakan klik tombol di bawah untuk Menyalakan (🟢) atau Mematikan (🔴) fitur di bot.\n\n`;
+    text += `<i>*Jika dimatikan, user yang mengklik menu tersebut akan otomatis tertolak oleh sistem.</i>`;
+
+    try {
+        await ctx.editMessageMedia(
+            { type: "photo", media: config.katalogImage, caption: text, parse_mode: "HTML" },
+            { reply_markup: { inline_keyboard: buttons } }
+        );
+    } catch (err) {
+        if (err.description && err.description.includes("message is not modified")) return;
+        await ctx.deleteMessage().catch(()=>{});
+        await ctx.replyWithPhoto(config.katalogImage, { caption: text, parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }).catch(()=>{});
+    }
+});
+
+// ===== MESIN PENGUBAH ON / OFF =====
+bot.action(/toggle_feature\|(.+)/, async (ctx) => {
+    if (!isOwner(ctx)) return ctx.answerCbQuery("❌ Khusus Owner!", { show_alert: true });
+    
+    const key = ctx.match[1];
+    const settings = loadSettings();
+    
+    // Ubah statusnya (Kalau True jadi False, kalau False jadi True)
+    settings[key] = !settings[key]; 
+    saveSettings(settings);
+
+    await ctx.answerCbQuery(`✅ Fitur ${key.toUpperCase()} berhasil diubah menjadi ${settings[key] ? "ON" : "OFF"}!`);
+    
+    // Refresh Halaman (Panggil fungsi menu-nya lagi biar tombolnya berubah warna)
+    const btn = (k, name) => ({ text: settings[k] ? `🟢 ${name}` : `🔴 ${name}`, callback_data: `toggle_feature|${k}` });
+    const buttons = [
+        [btn('panel', 'Panel Biasa'), btn('admin', 'Admin Panel')],
+        [btn('vps', 'VPS DO'), btn('do', 'Akun DO')],
+        [btn('app', 'Apps Prem'), btn('script', 'Script')],
+        [btn('prompt', 'Prompt AI'), btn('subdo', 'Subdomain')],
+        [btn('smm', 'SMM Panel'), btn('topup', 'Top Up Game')],
+        [{ text: "↩️ Kembali ke Katalog", callback_data: "katalog" }]
+    ];
+    await ctx.editMessageReplyMarkup({ inline_keyboard: buttons }).catch(()=>{});
+});
+
+
+
 
     // #### HANDLE STORE BOT MENU ##### //
     bot.on("text", async (ctx) => {
@@ -1763,6 +2030,39 @@ bot.action(/deposit_pay\|(\d+)/, async (ctx) => {
             }
             return;
         }
+        
+                // ===== TANGKAP INPUT ID TOP UP GAME =====
+        if (pendingTopupOrder[fromId]) {
+            const state = pendingTopupOrder[fromId];
+            if (body.toLowerCase() === "batal") {
+                delete pendingTopupOrder[fromId];
+                return ctx.reply("✅ <b>Top Up dibatalkan.</b>", { parse_mode: "HTML" });
+            }
+
+            const targetId = body; // Target ID Game & Zone dari user
+            delete pendingTopupOrder[fromId];
+
+            // Simpan ke Sesi Sementara buat dibayar
+            topupTempOrder[fromId] = {
+                code: state.code,
+                target: targetId,
+                price: state.price
+            };
+
+            const confirmText = `<blockquote>🛒 <b>KONFIRMASI TOP UP</b></blockquote>\n\n📦 <b>Kode Item:</b> ${state.code}\n🔗 <b>ID Target:</b> <code>${escapeHTML(targetId)}</code>\n💰 <b>Harga Final:</b> Rp${state.price.toLocaleString('id-ID')}\n\nPilih metode pembayaran di bawah ini:`;
+            
+            return ctx.reply(confirmText, { 
+                parse_mode: "HTML", 
+                reply_markup: { 
+                    inline_keyboard: [
+                        [{ text: `💰 Bayar via Saldo`, callback_data: `pay_saldo_topup` }], 
+                        [{ text: `📷 Bayar via QRIS`, callback_data: `pay_qris_topup` }], 
+                        [{ text: "❌ Batal", callback_data: "cancel_order" }]
+                    ] 
+                } 
+            });
+        }
+
 
 
         
@@ -3211,7 +3511,8 @@ case "buysubdo": {
 
 bot.action("buyprompt", async (ctx) => {
     const promptsList = loadPrompts();
-    if (!promptsList.length) return ctx.answerCbQuery("Stok prompt kosong", { show_alert: true });
+    const settings = loadSettings();
+  if (!settings.prompt) return ctx.answerCbQuery("🚫 Fitur Beli Prompt AI sedang Offline / Dimatikan.", { show_alert: true });
     
     await ctx.answerCbQuery().catch(() => {});
 
@@ -3426,7 +3727,9 @@ bot.action(/del_prompt\|(.+)/, async (ctx) => {
 // ===== TOMBOL BUKA MENU SCRIPT =====
 bot.action("buyscript", async (ctx) => {
     const scriptsList = loadScripts();
-    if (!scriptsList.length) {
+    const settings = loadSettings();
+
+    if (!settings.script) {
         return ctx.answerCbQuery("💻 Stok Script Kosong\n\n😕 Untuk saat ini belum ada script yang bisa diproses.", { show_alert: true });
     }
     await ctx.answerCbQuery("⏳ Membuka katalog script...", { show_alert: false }).catch(() => {});
@@ -3448,8 +3751,8 @@ bot.action("ignore", async (ctx) => {
 bot.action("buyapp", async (ctx) => {
     const stocks = loadStocks();
     const categories = Object.keys(stocks);
-
-    if (!categories.length)
+    const settings = loadSettings();
+    if (!settings.app)
         return ctx.answerCbQuery(`
 📱 Stok Apps Kosong
 
@@ -3567,8 +3870,8 @@ bot.action("history", async (ctx) => {
 bot.action("buydo", async (ctx) => {
   const doData = loadDO();
   const categories = Object.keys(doData);
-
-  if (!categories.length)
+  const settings = loadSettings();
+  if (!settings.do)
     return ctx.answerCbQuery(`
 🧾 Stok DO Kosong
 
@@ -3608,7 +3911,8 @@ Tim lagi cek ketersediaan, mohon tunggu update berikutnya ya.`, { show_alert: tr
 
 
 bot.action("buyvps", async (ctx) => {
-  if (!config.apiDigitalOcean)
+  const settings = loadSettings();
+  if (!settings.vps)
     return ctx.answerCbQuery(`
 🖥️ Fitur VPS Belum Tersedia
 
@@ -3647,7 +3951,8 @@ Kami sedang menyiapkan sistemnya agar bisa segera digunakan.`, { show_alert: tru
     
 // ===== MENU BUY PANEL =====
 bot.action("buypanel", async (ctx) => {
-  if (!isPanelReady()) {
+  const settings = loadSettings();
+  if (!settings.panel) {
     return ctx.answerCbQuery(`
 🎛️ Stok Panel Sedang Kosong
 
@@ -3697,7 +4002,9 @@ Restock akan dilakukan secepatnya, pantau terus ya.`,
 
 // ===== MENU BUY ADMIN =====
 bot.action("buyadmin", async (ctx) => {
-  if (!isPanelReady()) {
+  const settings = loadSettings();
+
+  if (!settings.admin) {
     return ctx.answerCbQuery(`
 👑 Stok Admin Panel Kosong
 
@@ -3871,7 +4178,9 @@ bot.action("cek_join", async (ctx) => {
 
 
 bot.action("smm_menu", async (ctx) => {
-    if (!config.smm || !config.smm.apiId || !config.smm.apiKey) {
+  const settings = loadSettings();
+
+    if (!settings.smm) {
         return ctx.answerCbQuery(`
 ⚙️ Fitur SMM Belum Tersedia
 
@@ -4307,13 +4616,22 @@ bot.action("katalog", async (ctx) => {
         { text: "🌐 ☇ Subdomain", callback_data: "buysubdo_menu" }
       ],
       [
-        { text: "📈 ☇ SMM Panel", callback_data: "smm_menu" }
+        { text: "📈 ☇ SMM Panel", callback_data: "smm_menu" }, // 🔥 INI KOMA YANG KETINGGALAN TADI
+        { text: "🎮 ☇ Topup Game", callback_data: "menu_listharga" }
       ],
       [
         { text: "↩️ 𝐁𝐀𝐂𝐊", callback_data: "back_to_main_menu" }
       ]
     ]
   };
+
+  // 👇 INI DIA MESIN TOMBOL RAHASIA OWNER-NYA 👇
+  if (isOwner(ctx)) {
+      // Sisipkan tombol Pengaturan tepat di atas tombol BACK (Index terakhir -1)
+      storeMenuKeyboard.inline_keyboard.splice(-1, 0, [
+          { text: "⚙️ Pengaturan Fitur (Owner)", callback_data: "admin_features" }
+      ]);
+  }
 
   const captionText = `
 <blockquote>🛍️ 𝗗𝗔𝗙𝗧𝗔𝗥 𝗠𝗘𝗡𝗨 𝗟𝗔𝗬𝗔𝗡𝗔𝗡 𝗕𝗢𝗧
@@ -4335,6 +4653,7 @@ Pilih kategori produk yang ingin dibeli:</blockquote>
     }
   }
 });
+
 
 
 bot.action("informasi_admin", async (ctx) => {
@@ -4441,6 +4760,9 @@ Mari berteman lebih dekat! Ikuti semua akun sosial media resmi kami untuk mendap
 
 
 bot.action("buysubdo_menu", async (ctx) => {
+  const settings = loadSettings();
+  if (!settings.subdo) return ctx.answerCbQuery("🚫 Fitur Beli Subdomain sedang Offline / Dimatikan.", { show_alert: true });
+
     await ctx.answerCbQuery().catch(() => {});
     
     activeMenus[ctx.from.id] = ctx.callbackQuery.message.message_id;
