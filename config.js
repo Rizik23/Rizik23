@@ -41,6 +41,35 @@ module.exports = {
     slug: "bgzikdrgaon",
     apiKey: "GtYmYoR6hVDYyCj6Rh9rl46i3mZlnlaw"
   },
+  
+      // --- PAYMENT ATLANTIC (TOP UP GAME) ---
+    untungTopup: 500, // Keuntungan lu per transaksi Top Up (Rp 500)
+    atlantic: "https://atlantich2h.com",
+    ApikeyAtlantic: "xFjN6vgx30hdaBl7gHolj1acuZwiOyJvQUOi1Rn58NYPb8ovqgJNcfaw6NZoen1O5GBa8laCIuSz5VPREXr35X1PoODnfwGuHXkm",
+
+    // --- KATEGORI TOP UP ATLANTIC ---
+    CATEGORY: {
+      cat_games: [
+        ['💎 Mobile Legends', 'ml'],
+        ['🔥 Free Fire', 'ff'],
+        ['🔫 PUBG Mobile', 'pubg']
+      ],
+      cat_ewallet: [
+        ['💳 DANA', 'dana'],
+        ['🟣 OVO', 'ovo'],
+        ['🟢 GOPAY', 'gopay']
+      ]
+    },
+
+    PRODUCTS: {
+      ml: { provider: 'MOBILE LEGENDS' },
+      ff: { provider: 'FREE FIRE' },
+      pubg: { provider: 'PUBG MOBILE' },
+      dana: { provider: 'DANA' },
+      ovo: { provider: 'OVO' },
+      gopay: { provider: 'GO PAY' }
+    },
+
 
   // Info payment manual (opsional)
   payment: {
@@ -75,8 +104,8 @@ module.exports = {
   
     // --- Suntik Sosmed Setting ( FayuPedia ) ---
   smm: {
-      apiId: '', // isi dengan API ID lu dari web https://fayupedia.id/api
-      apiKey: '', // isi dengan API KEY lu
+      apiId: '177578', // isi dengan API ID lu dari web https://fayupedia.id/api
+      apiKey: 'af2f0l-mgbqpz-qxgzsy-cdzffk-ugndvz', // isi dengan API KEY lu
       baseUrl: 'https://fayupedia.id/api', 
       profitMargin: 1.3 // Untung lu 30%
   },
